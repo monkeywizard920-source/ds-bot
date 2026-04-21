@@ -1,0 +1,23 @@
+services:
+  - type: worker
+    name: sanya-bot
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m app
+    envVars:
+      - key: BOT_TOKEN
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: OPENAI_BASE_URL
+        value: https://openrouter.ai/api/v1
+      - key: LLM_MODELS
+        value: "openrouter/free"
+      - key: DATABASE_PATH
+        value: /data/bot.sqlite3
+    disk:
+      name: bot-data
+      mountPath: /data
+      sizeGB: 1
