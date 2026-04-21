@@ -11,10 +11,6 @@ services:
         sync: false
       - key: GROQ_API_KEY
         sync: false
-      - key: OPENAI_BASE_URL
-        value: https://openrouter.ai/api/v1
-      - key: LLM_MODELS
-        value: "openrouter/free"
       - key: DATABASE_PATH
         value: /data/bot.sqlite3
     disk:

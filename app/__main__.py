@@ -5,7 +5,7 @@ import logging
 import os
 
 from aiogram import Bot
-from aiogram.exceptions import TelegramNetworkError
+from aiogram.exceptions import TelegramNetworkError, TelegramConflictError
 from aiohttp import web
 
 from app.bot import create_bot, create_dispatcher
@@ -65,6 +65,13 @@ async def main() -> None:
         bot = create_bot(settings, proxy_url=proxy_url)
         try:
             await dispatcher.start_polling(bot)
+        except TelegramConflictError:
+            logger.error(
+                "Обнаружен конфликт: запущен другой экземпляр бота. "
+                "Если вы на Render, это нормально при деплое. Ждем 15 секунд..."
+            )
+            await bot.session.close()
+            await asyncio.sleep(15)
         except TelegramNetworkError as error:
             next_proxy = proxy_pool.rotate()
             logger.warning(
