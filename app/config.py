@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     telegram_request_timeout: int = Field(default=10, alias="TELEGRAM_REQUEST_TIMEOUT", ge=3)
     polling_retry_delay: float = Field(default=2.0, alias="POLLING_RETRY_DELAY", ge=0.1)
 
+    groq_api_key: str | None = Field(default=None, alias="GROQ_API_KEY")
+
     llm_temperature: float = Field(default=0.6, alias="LLM_TEMPERATURE", ge=0.0, le=2.0)
     llm_top_p: float = Field(default=0.95, alias="LLM_TOP_P", ge=0.0, le=1.0)
     llm_max_tokens: int = Field(default=4096, alias="LLM_MAX_TOKENS", ge=1)

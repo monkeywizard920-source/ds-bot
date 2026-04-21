@@ -18,8 +18,7 @@ class LLMService:
 
     @staticmethod
     def _build_groq_client(settings: Settings) -> AsyncOpenAI | None:
-        # Ключ теперь берется из переменных окружения, без хардкода в коде
-        api_key = _clean_api_key(os.getenv("GROQ_API_KEY"))
+        api_key = _clean_api_key(settings.groq_api_key)
         if not api_key:
             return None
 
@@ -92,8 +91,7 @@ class LLMService:
         context: str,
         question: str,
     ) -> str:
-        extra_body = _extra_body_for_model(model)
-        stream_kwargs = {"extra_body": extra_body} if extra_body else {}
+        stream_kwargs = {}
 
         stream = await client.chat.completions.create(
             model=model,
@@ -147,7 +145,7 @@ def _clean_api_key(api_key: str | None) -> str | None:
 
     # Расширенный список заглушек, которые нужно игнорировать
     placeholders = {
-        "nvidia_api_key", "openai_api_key",
+        "groq_api_key", "nvidia_api_key", "openai_api_key",
         "nvapi-your-key", "sk-your-key", "your-key-here", "none", "null", "undefined"
     }
     
