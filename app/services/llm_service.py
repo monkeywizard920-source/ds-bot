@@ -19,12 +19,18 @@ class LLMService:
 
     @staticmethod
     def _build_client(settings: Settings) -> AsyncOpenAI | None:
-        api_key = _clean_api_key(settings.nvidia_api_key) or _clean_api_key(settings.openai_api_key)
-        if not api_key:
-            return None
+        nvidia_key = _clean_api_key(settings.nvidia_api_key)
+        openai_key = _clean_api_key(settings.openai_api_key)
 
-        base_url = settings.openai_base_url or None
-        return AsyncOpenAI(api_key=api_key, base_url=base_url)
+        if nvidia_key:
+            logger.info("LLM service initialized using NVIDIA_API_KEY source")
+            return AsyncOpenAI(api_key=nvidia_key, base_url=settings.openai_base_url or None)
+
+        if openai_key:
+            logger.info("LLM service initialized using OPENAI_API_KEY source")
+            return AsyncOpenAI(api_key=openai_key, base_url=settings.openai_base_url or None)
+
+        return None
 
     @staticmethod
     def _build_groq_client(settings: Settings) -> AsyncOpenAI | None:
@@ -74,8 +80,8 @@ class LLMService:
                 if isinstance(error, AuthenticationError):
                     logger.warning("NVIDIA/OpenAI API key was rejected: %s", error)
                     return (
-                        "LLM API отклонила ключ: Authentication failed. "
-                        "Проверьте, что в .env указан настоящий OPENAI_API_KEY."
+                        "Ошибка авторизации (401). Проверьте правильность API ключа "
+                        "в настройках Environment Variables на вашем хостинге."
                     )
 
                 # Если закончились деньги или лимиты на OpenRouter, переходим к Groq
@@ -172,7 +178,14 @@ def _clean_api_key(api_key: str | None) -> str | None:
     if env_reference:
         cleaned = env_reference
 
-    if cleaned in {"$NVIDIA_API_KEY", "NVIDIA_API_KEY", "nvapi-your-key", "sk-your-key"}:
+    # Расширенный список заглушек, которые нужно игнорировать
+    placeholders = {
+        "$nvidia_api_key", "$openai_api_key", "nvidia_api_key", "openai_api_key",
+        "nvapi-your-key", "sk-your-key", "your-key-here", "none", "null", "undefined"
+    }
+    
+    if cleaned.lower() in placeholders:
+        logger.debug("Filtered out placeholder API key: %s", cleaned)
         return None
 
     return cleaned
