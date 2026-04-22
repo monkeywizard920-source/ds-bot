@@ -15,8 +15,6 @@ class Settings(BaseSettings):
 
     bot_token: str = Field(alias="BOT_TOKEN")
     telegram_api_base_url: str | None = Field(default=None, alias="TELEGRAM_API_BASE_URL")
-    telegram_proxy_url: str | None = Field(default=None, alias="TELEGRAM_PROXY_URL")
-    telegram_proxy_file: Path = Field(default=Path("proxies.txt"), alias="TELEGRAM_PROXY_FILE")
     telegram_request_timeout: int = Field(default=10, alias="TELEGRAM_REQUEST_TIMEOUT", ge=3)
     polling_retry_delay: float = Field(default=2.0, alias="POLLING_RETRY_DELAY", ge=0.1)
 

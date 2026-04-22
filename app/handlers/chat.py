@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import logging
 import re
 from datetime import datetime, timezone
 
 from aiogram import Bot, F, Router
-from aiogram.exceptions import TelegramBadRequest
+from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from aiogram.filters import Command
 from aiogram.types import Message
 
@@ -13,6 +14,7 @@ from app.domain import StoredMessage
 from app.services.context_service import ContextService
 from app.services.llm_service import LLMService
 
+logger = logging.getLogger(__name__)
 router = Router(name="chat")
 SANYA_CALL_RE = re.compile(r"^\s*саня\b[\s,.:;!?-]*(.*)$", re.IGNORECASE)
 _BOT_ID: int | None = None
@@ -49,6 +51,7 @@ async def reset_context(message: Message, context_service: ContextService) -> No
 @router.message(Command("ask"))
 async def ask(
     message: Message,
+    bot: Bot,
     context_service: ContextService,
     llm_service: LLMService,
     settings: Settings,

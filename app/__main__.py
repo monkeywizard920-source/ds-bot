@@ -14,7 +14,6 @@ from app.logging_config import setup_logging
 from app.repositories.message_repository import MessageRepository
 from app.services.context_service import ContextService
 from app.services.llm_service import LLMService
-from app.services.proxy_pool import load_proxy_pool
 
 logger = logging.getLogger(__name__)
 
@@ -44,11 +43,6 @@ async def main() -> None:
         max_context_chars=settings.max_context_chars,
     )
     llm_service = LLMService(settings=settings)
-    proxy_pool = load_proxy_pool(
-        proxy_url=settings.telegram_proxy_url,
-        proxy_file=settings.telegram_proxy_file,
-    )
-    logger.info("Loaded %s Telegram proxy option(s).", proxy_pool.size)
 
     dispatcher = create_dispatcher(
         settings=settings,
@@ -60,9 +54,8 @@ async def main() -> None:
     asyncio.create_task(start_health_check_server())
 
     while True:
-        proxy_url = proxy_pool.current
-        logger.info("Starting Telegram polling with proxy: %s", proxy_url or "direct")
-        bot = create_bot(settings, proxy_url=proxy_url)
+        logger.info("Starting Telegram polling (direct connection)")
+        bot = create_bot(settings)
         try:
             await dispatcher.start_polling(bot)
         except TelegramConflictError:
@@ -73,11 +66,9 @@ async def main() -> None:
             await bot.session.close()
             await asyncio.sleep(15)
         except TelegramNetworkError as error:
-            next_proxy = proxy_pool.rotate()
             logger.warning(
-                "Telegram API is unavailable: %s. Next proxy: %s. Retrying in %s seconds.",
+                "Telegram API is unavailable: %s. Retrying in %s seconds.",
                 error,
-                next_proxy or "direct",
                 settings.polling_retry_delay,
             )
             await bot.session.close()

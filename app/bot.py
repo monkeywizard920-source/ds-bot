@@ -10,13 +10,12 @@ from app.services.context_service import ContextService
 from app.services.llm_service import LLMService
 
 
-def create_bot(settings: Settings, proxy_url: str | None = None) -> Bot:
+def create_bot(settings: Settings) -> Bot:
     session_kwargs = {}
     if settings.telegram_api_base_url:
         session_kwargs["api"] = TelegramAPIServer.from_base(settings.telegram_api_base_url)
 
     session = AiohttpSession(
-        proxy=proxy_url,
         timeout=settings.telegram_request_timeout,
         **session_kwargs,
     )
