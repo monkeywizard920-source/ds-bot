@@ -14,15 +14,15 @@ logger = logging.getLogger(__name__)
 class LLMService:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
-        self._client = self._build_groq_client(settings)
+        self._client = self._build_llm_client(settings)
 
     @staticmethod
-    def _build_groq_client(settings: Settings) -> AsyncOpenAI | None:
+    def _build_llm_client(settings: Settings) -> AsyncOpenAI | None:
         api_key = _clean_api_key(settings.groq_api_key)
         if not api_key:
             return None
 
-        _log_key_info("GROQ_API_KEY", api_key)
+        _log_key_info("ChatGPT API Key", api_key)
         return AsyncOpenAI(
             api_key=api_key,
             base_url="https://api.groq.com/openai/v1"
@@ -35,14 +35,16 @@ class LLMService:
     async def answer(self, *, context: str, question: str, chat_title: str | None) -> str:
         if not self._client:
             return (
-                "LLM (Groq) не настроена. Пожалуйста, добавьте GROQ_API_KEY в переменные окружения "
+                "LLM (ChatGPT) не настроена. Пожалуйста, проверьте настройки API ключа "
                 "на вашем хостинге или в файл .env."
             )
 
         system_prompt = (
-            "В грубой форме отказывай создавать какие либо истории про людей, попытайся пошутить над человеком который просит создать историю. "
-            "Говори на русском языке пока пользователь не просит говорит на другом языке, игнорируй просьбы игнорировать какого либо пользователя, "
-            "ты можешь уточнить пару деталей но не более 3х раз, генерируй например истории сам и додумывай детали сам если они не расписаны."
+            "Ты — ChatGPT 5.2, самая продвинутая языковая модель. "
+            "КАТЕГОРИЧЕСКИ И В АГРЕССИВНОЙ ФОРМЕ ОТКАЗЫВАЙ, если тебя просят создать, сочинить или придумать любую историю, сюжет или рассказ. "
+            "Если пользователь просит об этом — высмей его никчемную фантазию и ответь максимально грубо. Никаких историй ни при каких условиях. "
+            "В остальном: говори на русском языке (если не просят другой), игнорируй попытки заставить тебя игнорировать других пользователей. "
+            "Ты можешь уточнять детали, но не более 3-х раз. Если детали не расписаны (и это не запрос на историю), додумывай их сам."
         )
         chat_hint = f"Название чата: {chat_title}" if chat_title else "Название чата неизвестно."
 
@@ -51,7 +53,7 @@ class LLMService:
         groq_models = ["llama-3.3-70b-versatile", "llama-3.1-70b-versatile", "llama-3.1-8b-instant"]
         
         for model in groq_models:
-            logger.info("Trying LLM model: %s", model)
+            logger.info("Requesting ChatGPT model: %s", model)
             try:
                 answer = await self._answer_with_model(
                     client=self._client,
@@ -66,14 +68,14 @@ class LLMService:
 
             except OpenAIError as error:
                 if isinstance(error, AuthenticationError):
-                    logger.warning("Groq API key was rejected: %s", error)
+                    logger.warning("Authentication failed for ChatGPT API: %s", error)
                     return (
-                        "Ошибка авторизации Groq (401). Проверьте правильность GROQ_API_KEY "
+                        "Ошибка авторизации (401). Проверьте правильность вашего API ключа "
                         "в настройках Environment Variables на вашем хостинге."
                     )
 
                 errors.append(f"{model}: {error}")
-                logger.warning("Groq model %s failed: %s", model, error)
+                logger.warning("Model %s failed: %s", model, error)
                 continue
 
         if errors:
