@@ -28,9 +28,9 @@ async def chat_guard(handler, event: Message, data):
     chat_control: ChatControlService = data['chat_control']
     settings: Settings = data['settings']
     
-    # 1. Если пользователь в списке исключений — пропускаем сразу к хендлерам
-    user_id = event.from_user.id if event.from_user else None
-    if user_id and (user_id in settings.excluded_ids or user_id == settings.admin_id):
+    # 1. Если пользователь в списке исключений или админ — пропускаем без ограничений (manual mode и т.д.)
+    uid = event.from_user.id if event.from_user else None
+    if uid and (int(uid) in [int(i) for i in settings.excluded_ids] or int(uid) == int(settings.admin_id)):
         return await handler(event, data)
 
     if not event.from_user:

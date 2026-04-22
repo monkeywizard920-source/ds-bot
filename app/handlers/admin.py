@@ -4,13 +4,21 @@ from aiogram import Router, Bot, F, types
 from aiogram.filters import Command
 from aiogram.types import Message, BufferedInputFile, InlineKeyboardButton, CallbackQuery
 from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.filters import BaseFilter
 from app.config import Settings
 from app.services.chat_control_service import ChatControlService
 
 router = Router(name="admin")
 
-# Фильтр: только админ может использовать этот роутер
-router.message.filter(lambda m, settings: m.from_user and m.from_user.id == settings.admin_id)
+class AdminFilter(BaseFilter):
+    """Проверка, что пользователь является администратором."""
+    async def __call__(self, message: Message, settings: Settings) -> bool:
+        if not message.from_user:
+            return False
+        return int(message.from_user.id) == int(settings.admin_id)
+
+# Применяем фильтр ко всем хендлерам в этом роутере
+router.message.filter(AdminFilter())
 
 @router.message(Command("on"))
 async def cmd_on(message: Message, chat_control: ChatControlService):
@@ -170,13 +178,18 @@ async def cmd_broadcast(message: Message, bot: Bot, chat_control: ChatControlSer
 @router.message(Command("yazik"))
 async def cmd_language(message: Message, chat_control: ChatControlService):
     parts = (message.text or "").split()
-    if len(parts) < 2 or parts[1] not in ("1", "2"):
-        return await message.answer("Использование:\n`/yazik 1` — Русский\n`/yazik 2` — Китайский", parse_mode="Markdown")
+    if len(parts) < 2 or parts[1] not in ("1", "2", "3"):
+        return await message.answer(
+            "Использование:\n`/yazik 1` — Русский\n`/yazik 2` — Китайский\n`/yazik 3` — Украинский",
+            parse_mode="Markdown"
+        )
     
     lang_code = parts[1]
     await chat_control.set_global_language(lang_code)
     
-    lang_name = "Русский" if lang_code == "1" else "Китайский"
+    languages = {"1": "Русский", "2": "Китайский", "3": "Украинский"}
+    lang_name = languages.get(lang_code, "Неизвестный")
+    
     await message.answer(f"Глобальный язык изменен на: **{lang_name}**", parse_mode="Markdown")
 
 # Безопасный фильтр для ответов админа (проверяет и текст, и подписи к фото)

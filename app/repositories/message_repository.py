@@ -128,8 +128,11 @@ class MessageRepository:
         async with aiosqlite.connect(self._database_path) as db:
             keys = list(kwargs.keys())
             values = list(kwargs.values())
+            
             set_clause = ", ".join([f"{k} = ?" for k in keys])
             placeholders = ", ".join(["?"] * len(keys))
+            
+            # Для SQLite ON CONFLICT нам нужно передать значения дважды: для INSERT и для UPDATE
             await db.execute(f'''
                 INSERT INTO chat_settings (chat_id, {", ".join(keys)})
                 VALUES (?, {placeholders})
