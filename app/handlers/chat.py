@@ -21,6 +21,33 @@ SANYA_CALL_RE = re.compile(r"^\s*саня\b[\s,.:;!?-]*(.*)$", re.IGNORECASE)
 _BOT_ID: int | None = None
 _BOT_USERNAME: str | None = None
 
+@router.message.middleware()
+async def chat_guard(handler, event: Message, data):
+    """Глобальный фильтр состояния чата (ВКЛ/ВЫКЛ/MANUAL)."""
+    chat_control: ChatControlService = data['chat_control']
+    settings: Settings = data['settings']
+    
+    # Админ всегда проходит без проверок
+    if event.from_user.id == settings.admin_id:
+        return await handler(event, data)
+
+    chat_settings = await chat_control.get_status(event.chat.id)
+    
+    # 1. Если бот выключен — полный игнор
+    if not chat_settings.get("is_enabled", True):
+        return
+
+    # 2. Если ручной режим — пересылка админу и остановка (команды пропускаем)
+    if chat_settings.get("mode") == "manual" and not (event.text or "").startswith("/"):
+        bot: Bot = data['bot']
+        log_text = chat_control.format_forward_header(
+            event.chat.id, event.from_user.id, event.text or event.caption or "[Медиа]"
+        )
+        await bot.send_message(settings.admin_id, log_text)
+        return
+
+    return await handler(event, data)
+
 
 @router.message(Command("start"))
 async def start(message: Message) -> None:
@@ -185,11 +212,11 @@ async def _should_answer(message: Message, bot: Bot, settings: Settings) -> bool
     if SANYA_CALL_RE.match(text):
         return True
 
-    bot_user = await _bot_user(bot)
     if message.reply_to_message and message.reply_to_message.from_user:
-        if message.reply_to_message.from_user.id == bot_user.id:
+        if message.reply_to_message.from_user.id == bot.id:
             return True
 
+    bot_user = await _bot_user(bot)
     username = bot_user.username
     if username and f"@{username.lower()}" in (message.text or message.caption or "").lower():
         return True

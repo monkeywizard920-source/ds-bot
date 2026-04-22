@@ -69,7 +69,7 @@ app/
     message_repository.py  # SQLite persistence
   services/
     context_service.py     # Context formatting and memory operations
-    llm_service.py         # OpenAI-compatible LLM client
+      llm_service.py         # Groq LLM client (presents as DeepSeek)
 ```
 
 ## Notes

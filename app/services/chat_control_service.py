@@ -1,5 +1,6 @@
- from __future__ import annotations
+from __future__ import annotations
 import json
+import re
 from app.repositories.message_repository import MessageRepository
 from app.domain import StoredMessage
 
@@ -52,7 +53,6 @@ class ChatControlService:
 
     def parse_reply_header(self, text: str) -> tuple[int, int] | None:
         try:
-            import re
             match = re.search(r"\[chat_id=(-?\d+)\]\[user_id=(\d+)\]", text)
             if match:
                 return int(match.group(1)), int(match.group(2))

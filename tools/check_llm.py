@@ -5,18 +5,18 @@ import os
 import re
 
 from app.config import Settings
-from app.services.llm_service import LLMService, _clean_api_key, _model_candidates
+from app.services.llm_service import LLMService, _clean_api_key
 
 
 async def main() -> None:
     settings = Settings()
     service = LLMService(settings)
-    raw_key = (settings.nvidia_api_key or settings.openai_api_key or "").strip().strip("\"'")
+    raw_key = (settings.groq_api_key or "").strip().strip("\"'")
     cleaned_key = _clean_api_key(raw_key)
     placeholder_values = {"$NVIDIA_API_KEY", "NVIDIA_API_KEY", "nvapi-your-key", "sk-your-key"}
 
     print(f"configured={service.is_configured}")
-    print("models=" + ",".join(_model_candidates(settings)))
+    print(f"model={settings.groq_model}")
     print(f"key_length={len(raw_key)}")
 
     env_reference = _env_reference_name(raw_key)
@@ -32,7 +32,7 @@ async def main() -> None:
 
     if not cleaned_key:
         print("key_status=missing")
-        print("В .env нет NVIDIA_API_KEY или OPENAI_API_KEY.")
+        print("В .env нет GROQ_API_KEY.")
         return
 
     print("key_status=set")

@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     admin_id: int = Field(default=5710686998, alias="ADMIN_ID")
 
     groq_api_key: str | None = Field(default=None, alias="GROQ_API_KEY")
+    groq_model: str = Field(default="llama-3.3-70b-versatile", alias="GROQ_MODEL")
+    openai_base_url: str = Field(default="https://api.groq.com/openai/v1", alias="OPENAI_BASE_URL")
 
     llm_temperature: float = Field(default=0.6, alias="LLM_TEMPERATURE", ge=0.0, le=2.0)
     llm_top_p: float = Field(default=0.95, alias="LLM_TOP_P", ge=0.0, le=1.0)

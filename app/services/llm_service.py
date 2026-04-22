@@ -22,10 +22,10 @@ class LLMService:
         if not api_key:
             return None
 
-        _log_key_info("DeepSeek API Key", api_key)
+        _log_key_info("Groq API Key", api_key)
         return AsyncOpenAI(
             api_key=api_key,
-            base_url="https://api.groq.com/openai/v1"
+            base_url=settings.openai_base_url
         )
 
     @property
@@ -45,34 +45,27 @@ class LLMService:
         )
         chat_hint = f"Название чата: {chat_title}" if chat_title else "Название чата неизвестно."
 
-        errors: list[str] = []
-        # Используем только модели Groq
-        groq_models = ["llama-3.3-70b-versatile", "llama-3.1-70b-versatile", "llama-3.1-8b-instant"]
-        
-        for model in groq_models:
-            logger.info("Requesting DeepSeek model: %s", model)
-            try:
-                answer = await self._answer_with_model(
-                    client=self._client,
-                    model=model,
-                    system_prompt=system_prompt,
-                    chat_hint=chat_hint,
-                    context=context,
-                    question=question,
-                )
-                if answer:
-                    return f"{answer}\n\nОтвечено с помощью DeepSeek 3.2"
+        model = self._settings.groq_model
+        logger.info("Requesting Groq model: %s", model)
+        try:
+            answer = await self._answer_with_model(
+                client=self._client,
+                model=model,
+                system_prompt=system_prompt,
+                chat_hint=chat_hint,
+                context=context,
+                question=question,
+            )
+            if answer:
+                return f"{answer}\n\nОтвечено с помощью DeepSeek 3.2"
 
-            except OpenAIError as error:
-                if isinstance(error, AuthenticationError):
-                    logger.warning("Authentication failed for DeepSeek API: %s", error)
-                    return "Ошибка"
+        except OpenAIError as error:
+            if isinstance(error, AuthenticationError):
+                logger.warning("Authentication failed for Groq API: %s", error)
+                return "Ошибка авторизации (проверьте GROQ_API_KEY)"
 
-                errors.append(f"{model}: {error}")
-                logger.warning("Model %s failed: %s", model, error)
-                continue
+            logger.error("LLM Request failed: %s", error)
 
-        # Если все модели выдали ошибку или список пуст
         return "Ошибка"
 
     async def _answer_with_model(
@@ -116,7 +109,6 @@ class LLMService:
                 chunks.append(content)
 
         return "".join(chunks).strip()
-
 
 def _log_key_info(name: str, key: str) -> None:
     # Показывает в логах первые 4 и последние 4 символа ключа для проверки

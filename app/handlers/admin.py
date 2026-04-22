@@ -7,7 +7,7 @@ from app.services.chat_control_service import ChatControlService
 
 router = Router(name="admin")
 
-# Исправленный фильтр: берем admin_id напрямую из настроек в контексте
+# Фильтр: только админ может использовать этот роутер
 router.message.filter(lambda m, settings: m.from_user.id == settings.admin_id)
 
 @router.message(Command("on"))
@@ -43,7 +43,7 @@ async def cmd_status(message: Message, chat_control: ChatControlService, setting
         f"Чатов в базе: {stats['total']}\n"
         f"Отключено: {stats['disabled']}\n"
         f"Manual-режим: {stats['manual']}\n"
-        f"Модель: `llama-3.3-70b` (DeepSeek 3.2)\n"
+        f"Модель: `{settings.groq_model}` (DeepSeek 3.2)\n"
     )
     await message.answer(text, parse_mode="Markdown")
 
