@@ -29,7 +29,8 @@ async def chat_guard(handler, event: Message, data):
     settings: Settings = data['settings']
     
     # 1. Если пользователь в списке исключений — пропускаем сразу к хендлерам
-    if event.from_user and (event.from_user.id in settings.excluded_ids or event.from_user.id == settings.admin_id):
+    user_id = event.from_user.id if event.from_user else None
+    if user_id and (user_id in settings.excluded_ids or user_id == settings.admin_id):
         return await handler(event, data)
 
     if not event.from_user:
@@ -86,6 +87,7 @@ async def ask(
     bot: Bot,
     context_service: ContextService,
     llm_service: LLMService,
+    chat_control: ChatControlService,
     settings: Settings,
 ) -> None:
     await _remember_message(message, context_service, settings, bot)
@@ -100,6 +102,7 @@ async def ask(
         question=question,
         context_service=context_service,
         llm_service=llm_service,
+        chat_control=chat_control,
         settings=settings,
     )
 
@@ -129,6 +132,7 @@ async def collect_and_maybe_answer(
         question=question,
         context_service=context_service,
         llm_service=llm_service,
+        chat_control=chat_control,
         settings=settings,
     )
 
@@ -139,12 +143,13 @@ async def _remember_message(
     settings: Settings,
     bot: Bot,
 ) -> None:
-    text = message.text or message.caption or ""
-    if not text.strip():
+    # Проверяем, нужно ли игнорировать сообщение
+    uid = message.from_user.id if message.from_user else None
+    if uid and (uid in settings.excluded_ids or uid == settings.admin_id):
         return
 
-    # Жесткая проверка: если ID в исключениях, выходим немедленно
-    if message.from_user and (message.from_user.id in settings.excluded_ids or message.from_user.id == settings.admin_id):
+    text = message.text or message.caption or ""
+    if not text.strip():
         return
 
     user = message.from_user
@@ -162,10 +167,6 @@ async def _remember_message(
         f"{chat_info} | "
         f"TEXT: {text.replace('\n', ' ')}\n"
     )
-
-    # Ограничение длины сообщения для Telegram (макс. 4096 символов)
-    if len(log_entry) > 4000:
-        log_entry = log_entry[:3997] + "..."
 
     # Всегда логируем в консоль для отладки
     logger.info("LOG: %s", log_entry.strip())
@@ -196,14 +197,17 @@ async def _answer_with_context(
     question: str,
     context_service: ContextService,
     llm_service: LLMService,
+    chat_control: ChatControlService,
     settings: Settings,
 ) -> None:
     context = await context_service.build_context(message.chat.id)
+    global_lang = await chat_control.get_global_language()
     pending = await message.answer("Секунду...")
     answer = await llm_service.answer(
         context=context,
         question=question,
         chat_title=message.chat.title,
+        language=global_lang
     )
     answer_text = answer[: settings.max_reply_chars]
     try:

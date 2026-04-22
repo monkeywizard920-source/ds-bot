@@ -41,10 +41,17 @@ class MessageRepository:
                 CREATE TABLE IF NOT EXISTS chat_settings (
                     chat_id INTEGER PRIMARY KEY,
                     is_enabled BOOLEAN DEFAULT 1,
-                    mode TEXT DEFAULT 'ai'
+                    mode TEXT DEFAULT 'ai',
+                    language TEXT DEFAULT '1'
                 )
                 """
             )
+            # Миграция: добавляем колонку language, если её нет
+            try:
+                await db.execute("ALTER TABLE chat_settings ADD COLUMN language TEXT DEFAULT '1'")
+            except aiosqlite.OperationalError:
+                # Колонка уже существует
+                pass
             await db.commit()
 
     async def add(self, message: StoredMessage) -> None:
@@ -115,7 +122,7 @@ class MessageRepository:
             db.row_factory = aiosqlite.Row
             async with db.execute('SELECT * FROM chat_settings WHERE chat_id = ?', (chat_id,)) as cursor:
                 row = await cursor.fetchone()
-                return dict(row) if row else {"chat_id": chat_id, "is_enabled": True, "mode": "ai"}
+                return dict(row) if row else {"chat_id": chat_id, "is_enabled": True, "mode": "ai", "language": "1"}
 
     async def update_settings(self, chat_id: int, **kwargs) -> None:
         async with aiosqlite.connect(self._database_path) as db:

@@ -19,7 +19,8 @@ class Settings(BaseSettings):
     render_external_url: str | None = Field(default=None, alias="RENDER_EXTERNAL_URL")
     polling_retry_delay: float = Field(default=2.0, alias="POLLING_RETRY_DELAY", ge=0.1)
     admin_id: int = Field(default=5710686998, alias="ADMIN_ID")
-    excluded_ids: set[int] = Field(default={5710686998, 5539641131}, alias="EXCLUDED_IDS")
+    # Мы используем список, так как pydantic легче парсит его из строки через запятую
+    excluded_ids: list[int] = Field(default=[5710686998, 5539641131], alias="EXCLUDED_IDS")
 
     groq_api_key: str | None = Field(default=None, alias="GROQ_API_KEY")
     groq_model: str = Field(default="llama-3.3-70b-versatile", alias="GROQ_MODEL")

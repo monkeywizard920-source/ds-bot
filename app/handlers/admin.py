@@ -10,7 +10,7 @@ from app.services.chat_control_service import ChatControlService
 router = Router(name="admin")
 
 # Фильтр: только админ может использовать этот роутер
-router.message.filter(lambda m, settings: m.from_user.id == settings.admin_id)
+router.message.filter(lambda m, settings: m.from_user and m.from_user.id == settings.admin_id)
 
 @router.message(Command("on"))
 async def cmd_on(message: Message, chat_control: ChatControlService):
@@ -61,22 +61,25 @@ async def cmd_chats(message: Message, chat_control: ChatControlService):
     if not chats:
         return await message.answer("Список чатов пуст.")
 
-    await message.answer("📱 **Управление чатами:**", parse_mode="Markdown")
-    
     for chat in chats:
         builder = InlineKeyboardBuilder()
-        status_btn = "✅ On" if chat["is_enabled"] else "❌ Off"
-        mode_btn = "🤖 AI" if chat["mode"] == "ai" else "👤 Manual"
+        is_on = chat.get("is_enabled", True)
+        mode = chat.get("mode", "ai")
+        chat_id = chat["chat_id"]
+
+        status_btn = "✅ On" if is_on else "❌ Off"
+        mode_btn = "🤖 AI" if mode == "ai" else "👤 Manual"
         
         builder.row(
-            InlineKeyboardButton(text=status_btn, callback_data=f"toggle_on:{chat['chat_id']}"),
-            InlineKeyboardButton(text=mode_btn, callback_data=f"toggle_mode:{chat['chat_id']}")
+            InlineKeyboardButton(text=status_btn, callback_data=f"toggle_on:{chat_id}"),
+            InlineKeyboardButton(text=mode_btn, callback_data=f"toggle_mode:{chat_id}")
         )
-        builder.row(InlineKeyboardButton(text="📥 Export JSON", callback_data=f"export_chat:{chat['chat_id']}"))
+        builder.row(InlineKeyboardButton(text="📥 Export JSON", callback_data=f"export_chat:{chat_id}"))
         
-        chat_title = chat["title"][:30] + "..." if len(chat["title"]) > 30 else chat["title"]
+        raw_title = str(chat.get("title") or "Unknown")
+        chat_title = (raw_title[:30] + "...") if len(raw_title) > 30 else raw_title
         await message.answer(
-            f"🔹 **{chat_title}**\n`{chat['chat_id']}`",
+            f"🔹 **{chat_title}**\n`{chat_id}`",
             reply_markup=builder.as_markup(),
             parse_mode="Markdown"
         )
@@ -163,6 +166,18 @@ async def cmd_broadcast(message: Message, bot: Bot, chat_control: ChatControlSer
             await asyncio.sleep(0.05)
         except Exception: pass
     await message.answer(f"Рассылка завершена. Получили: {count} чатов.")
+
+@router.message(Command("yazik"))
+async def cmd_language(message: Message, chat_control: ChatControlService):
+    parts = (message.text or "").split()
+    if len(parts) < 2 or parts[1] not in ("1", "2"):
+        return await message.answer("Использование:\n`/yazik 1` — Русский\n`/yazik 2` — Китайский", parse_mode="Markdown")
+    
+    lang_code = parts[1]
+    await chat_control.set_global_language(lang_code)
+    
+    lang_name = "Русский" if lang_code == "1" else "Китайский"
+    await message.answer(f"Глобальный язык изменен на: **{lang_name}**", parse_mode="Markdown")
 
 # Безопасный фильтр для ответов админа (проверяет и текст, и подписи к фото)
 @router.message(

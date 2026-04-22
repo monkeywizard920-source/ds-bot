@@ -29,6 +29,13 @@ class ChatControlService:
         await self.set_mode(chat_id, new_mode)
         return new_mode
 
+    async def get_global_language(self) -> str:
+        settings = await self.get_status(0)  # ID 0 используется для глобальных настроек
+        return settings.get("language", "1")
+
+    async def set_global_language(self, lang_code: str) -> None:
+        await self._repository.update_settings(0, language=lang_code)
+
     async def get_system_wide_stats(self) -> dict:
         return await self._repository.get_system_stats()
 
