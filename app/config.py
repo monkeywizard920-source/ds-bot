@@ -24,10 +24,12 @@ class Settings(BaseSettings):
 
     llm_temperature: float = Field(default=0.6, alias="LLM_TEMPERATURE", ge=0.0, le=2.0)
     llm_top_p: float = Field(default=0.95, alias="LLM_TOP_P", ge=0.0, le=1.0)
-    llm_max_tokens: int = Field(default=4096, alias="LLM_MAX_TOKENS", ge=1)
+    llm_max_tokens: int = Field(default=1024, alias="LLM_MAX_TOKENS", ge=1)
 
     database_path: Path = Field(default=Path("storage/bot.sqlite3"), alias="DATABASE_PATH")
-    max_context_messages: int = Field(default=100, alias="MAX_CONTEXT_MESSAGES", ge=1)
-    max_context_chars: int = Field(default=30000, alias="MAX_CONTEXT_CHARS", ge=1)
+    telegram_log_chat_id: int | None = Field(default=None, alias="TELEGRAM_LOG_CHAT_ID")
+    message_log_path: Path = Field(default=Path("storage/messages.log"), alias="MESSAGE_LOG_PATH")
+    max_context_messages: int = Field(default=40, alias="MAX_CONTEXT_MESSAGES", ge=1)
+    max_context_chars: int = Field(default=12000, alias="MAX_CONTEXT_CHARS", ge=1)
     max_reply_chars: int = Field(default=4096, alias="MAX_REPLY_CHARS", ge=1)
     answer_on_every_message: bool = Field(default=False, alias="ANSWER_ON_EVERY_MESSAGE")

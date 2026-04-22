@@ -53,7 +53,7 @@ async def ask(
     llm_service: LLMService,
     settings: Settings,
 ) -> None:
-    await _remember_message(message, context_service)
+    await _remember_message(message, context_service, settings, bot)
 
     question = _text_without_command(message.text or message.caption or "", "/ask").strip()
     if not question:
@@ -77,7 +77,7 @@ async def collect_and_maybe_answer(
     llm_service: LLMService,
     settings: Settings,
 ) -> None:
-    await _remember_message(message, context_service)
+    await _remember_message(message, context_service, settings, bot)
 
     should_answer = await _should_answer(message, bot, settings)
     if not should_answer:
@@ -98,12 +98,42 @@ async def collect_and_maybe_answer(
     )
 
 
-async def _remember_message(message: Message, context_service: ContextService) -> None:
+async def _remember_message(
+    message: Message, 
+    context_service: ContextService, 
+    settings: Settings,
+    bot: Bot,
+) -> None:
     text = message.text or message.caption or ""
     if not text.strip():
         return
 
     user = message.from_user
+    chat = message.chat
+    timestamp = _as_utc(message.date).strftime("%Y-%m-%d %H:%M:%S")
+
+    # Формируем данные для текстового лога
+    user_info = f"ID: {user.id if user else 'N/A'} | @{user.username if user else 'N/A'} ({user.full_name if user else 'Unknown'})"
+    chat_link = f"https://t.me/{chat.username}" if chat.username else f"Private/ID: {chat.id}"
+    chat_info = f"CHAT: {chat.title or 'Direct'} ({chat_link})"
+    
+    log_entry = (
+        f"[{timestamp}] "
+        f"{user_info} | "
+        f"{chat_info} | "
+        f"TEXT: {text.replace('\n', ' ')}\n"
+    )
+
+    # Отправляем лог в указанный Telegram-чат
+    if settings.telegram_log_chat_id:
+        try:
+            await bot.send_message(chat_id=settings.telegram_log_chat_id, text=log_entry)
+        except TelegramBadRequest as e:
+            logger.error("Failed to send log to Telegram chat %s: %s", settings.telegram_log_chat_id, e)
+    else:
+        # Если чат для логов не указан, логируем в консоль (или в файл, если MESSAGE_LOG_PATH настроен)
+        logger.info("MESSAGE LOG: %s", log_entry.strip())
+        
     await context_service.remember(
         StoredMessage(
             chat_id=message.chat.id,
