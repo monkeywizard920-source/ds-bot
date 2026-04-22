@@ -36,6 +36,15 @@ class MessageRepository:
                 ON messages (chat_id, created_at DESC)
                 """
             )
+            await db.execute(
+                """
+                CREATE TABLE IF NOT EXISTS chat_settings (
+                    chat_id INTEGER PRIMARY KEY,
+                    is_enabled BOOLEAN DEFAULT 1,
+                    mode TEXT DEFAULT 'ai'
+                )
+                """
+            )
             await db.commit()
 
     async def add(self, message: StoredMessage) -> None:
@@ -100,3 +109,35 @@ class MessageRepository:
             cursor = await db.execute("DELETE FROM messages WHERE chat_id = ?", (chat_id,))
             await db.commit()
             return cursor.rowcount
+
+    async def get_settings(self, chat_id: int) -> dict:
+        async with aiosqlite.connect(self._database_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute('SELECT * FROM chat_settings WHERE chat_id = ?', (chat_id,)) as cursor:
+                row = await cursor.fetchone()
+                return dict(row) if row else {"chat_id": chat_id, "is_enabled": True, "mode": "ai"}
+
+    async def update_settings(self, chat_id: int, **kwargs) -> None:
+        async with aiosqlite.connect(self._database_path) as db:
+            keys = list(kwargs.keys())
+            values = list(kwargs.values())
+            set_clause = ", ".join([f"{k} = ?" for k in keys])
+            placeholders = ", ".join(["?"] * len(keys))
+            await db.execute(f'''
+                INSERT INTO chat_settings (chat_id, {", ".join(keys)})
+                VALUES (?, {placeholders})
+                ON CONFLICT(chat_id) DO UPDATE SET {set_clause}
+            ''', [chat_id] + values + values)
+            await db.commit()
+
+    async def get_all_active_chats(self) -> list[int]:
+        async with aiosqlite.connect(self._database_path) as db:
+            async with db.execute('SELECT DISTINCT chat_id FROM messages') as cursor:
+                rows = await cursor.fetchall()
+                return [r[0] for r in rows]
+
+    async def get_system_stats(self) -> dict:
+        async with aiosqlite.connect(self._database_path) as db:
+            async with db.execute('SELECT COUNT(*), SUM(CASE WHEN is_enabled=0 THEN 1 ELSE 0 END), SUM(CASE WHEN mode="manual" THEN 1 ELSE 0 END) FROM chat_settings') as cursor:
+                row = await cursor.fetchone()
+                return {"total": row[0] or 0, "disabled": row[1] or 0, "manual": row[2] or 0}

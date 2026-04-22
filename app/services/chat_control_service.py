@@ -1,4 +1,4 @@
-from __future__ import annotations
+ from __future__ import annotations
 import json
 from app.repositories.message_repository import MessageRepository
 from app.domain import StoredMessage

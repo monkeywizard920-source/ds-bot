@@ -83,22 +83,6 @@ async def collect_and_maybe_answer(
     settings: Settings,
 ) -> None:
     await _remember_message(message, context_service, settings, bot)
-
-    # 10. Логика фильтрации
-    chat_settings = await chat_control.get_status(message.chat.id)
-    
-    # 1. Если чат отключен - игнор (кроме админа)
-    if not chat_settings["is_enabled"] and message.from_user.id != settings.admin_id:
-        return
-
-    # 2. Если MANUAL - пересылаем админу
-    if chat_settings["mode"] == "manual" and message.from_user.id != settings.admin_id:
-        log_text = chat_control.format_forward_header(
-            message.chat.id, message.from_user.id, message.text or "[Медиа]"
-        )
-        await bot.send_message(settings.admin_id, log_text)
-        return
-
     should_answer = await _should_answer(message, bot, settings)
     if not should_answer:
         return

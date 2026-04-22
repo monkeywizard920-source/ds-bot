@@ -7,13 +7,8 @@ from app.services.chat_control_service import ChatControlService
 
 router = Router(name="admin")
 
-# Guard: Only ADMIN_ID allowed
-@router.message.middleware()
-async def admin_guard(handler, event: Message, data):
-    settings: Settings = data['settings']
-    if event.from_user.id != settings.admin_id:
-        return
-    return await handler(event, data)
+# Исправленный фильтр: берем admin_id напрямую из настроек в контексте
+router.message.filter(lambda m, settings: m.from_user.id == settings.admin_id)
 
 @router.message(Command("on"))
 async def cmd_on(message: Message, chat_control: ChatControlService):
@@ -82,7 +77,11 @@ async def cmd_broadcast(message: Message, bot: Bot, chat_control: ChatControlSer
         except Exception: pass
     await message.answer(f"Рассылка завершена. Получили: {count} чатов.")
 
-@router.message(F.reply_to_message)
+# Безопасный фильтр для ответов админа (проверяет и текст, и подписи к фото)
+@router.message(
+    F.reply_to_message & 
+    (F.reply_to_message.text | F.reply_to_message.caption).regexp(r"\[chat_id=(-?\d+)\]")
+)
 async def admin_reply_handler(message: Message, bot: Bot, chat_control: ChatControlService):
     header_text = message.reply_to_message.text or message.reply_to_message.caption
     if not header_text: return
