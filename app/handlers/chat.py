@@ -18,6 +18,7 @@ from app.services.chat_control_service import ChatControlService
 logger = logging.getLogger(__name__)
 router = Router(name="chat")
 SANYA_CALL_RE = re.compile(r"^\s*саня\b[\s,.:;!?-]*(.*)$", re.IGNORECASE)
+
 _BOT_ID: int | None = None
 _BOT_USERNAME: str | None = None
 
@@ -27,8 +28,11 @@ async def chat_guard(handler, event: Message, data):
     chat_control: ChatControlService = data['chat_control']
     settings: Settings = data['settings']
     
-    # Админ всегда проходит без проверок
-    if event.from_user.id == settings.admin_id:
+    # 1. Если пользователь в списке исключений — пропускаем сразу к хендлерам
+    if event.from_user and (event.from_user.id in settings.excluded_ids or event.from_user.id == settings.admin_id):
+        return await handler(event, data)
+
+    if not event.from_user:
         return await handler(event, data)
 
     chat_settings = await chat_control.get_status(event.chat.id)
@@ -137,6 +141,10 @@ async def _remember_message(
 ) -> None:
     text = message.text or message.caption or ""
     if not text.strip():
+        return
+
+    # Жесткая проверка: если ID в исключениях, выходим немедленно
+    if message.from_user and (message.from_user.id in settings.excluded_ids or message.from_user.id == settings.admin_id):
         return
 
     user = message.from_user

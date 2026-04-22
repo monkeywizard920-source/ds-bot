@@ -17,9 +17,15 @@ class ChatControlService:
     async def set_mode(self, chat_id: int, mode: str) -> None:
         await self._repository.update_settings(chat_id, mode=mode)
 
+    async def toggle_enabled(self, chat_id: int) -> bool:
+        settings = await self.get_status(chat_id)
+        new_status = not settings.get("is_enabled", True)
+        await self.set_enabled(chat_id, new_status)
+        return new_status
+
     async def toggle_mode(self, chat_id: int) -> str:
         settings = await self.get_status(chat_id)
-        new_mode = "manual" if settings["mode"] == "ai" else "ai"
+        new_mode = "manual" if settings.get("mode") == "ai" else "ai"
         await self.set_mode(chat_id, new_mode)
         return new_mode
 
@@ -38,15 +44,18 @@ class ChatControlService:
         ]
         return json.dumps(data, ensure_ascii=False, indent=2)
 
-    async def get_all_chats_list(self) -> str:
-        chat_ids = await self._repository.get_all_active_chats()
-        lines = []
-        for cid in chat_ids:
-            s = await self._repository.get_settings(cid)
-            status = "✅" if s["is_enabled"] else "❌"
-            mode = "🤖" if s["mode"] == "ai" else "👤"
-            lines.append(f"{status} {mode} ID: `{cid}`")
-        return "\n".join(lines) or "Список пуст"
+    async def get_chats_with_meta(self) -> list[dict]:
+        chats = await self._repository.get_all_active_chats()
+        result = []
+        for c in chats:
+            settings = await self.get_status(c["chat_id"])
+            result.append({
+                "chat_id": c["chat_id"],
+                "title": c["last_title"] or f"ID: {c['chat_id']}",
+                "is_enabled": settings.get("is_enabled", True),
+                "mode": settings.get("mode", "ai")
+            })
+        return result
 
     def format_forward_header(self, chat_id: int, user_id: int | None, text: str) -> str:
         return f"[chat_id={chat_id}][user_id={user_id or 0}]\n{text}"

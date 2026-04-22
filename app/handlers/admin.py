@@ -1,7 +1,9 @@
 from __future__ import annotations
-from aiogram import Router, Bot, F
+import asyncio
+from aiogram import Router, Bot, F, types
 from aiogram.filters import Command
-from aiogram.types import Message, BufferedInputFile
+from aiogram.types import Message, BufferedInputFile, InlineKeyboardButton, CallbackQuery
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 from app.config import Settings
 from app.services.chat_control_service import ChatControlService
 
@@ -55,23 +57,108 @@ async def cmd_export(message: Message, chat_control: ChatControlService):
 
 @router.message(Command("chats"))
 async def cmd_chats(message: Message, chat_control: ChatControlService):
-    list_text = await chat_control.get_all_chats_list()
-    await message.answer(list_text, parse_mode="Markdown")
+    chats = await chat_control.get_chats_with_meta()
+    if not chats:
+        return await message.answer("Список чатов пуст.")
+
+    await message.answer("📱 **Управление чатами:**", parse_mode="Markdown")
+    
+    for chat in chats:
+        builder = InlineKeyboardBuilder()
+        status_btn = "✅ On" if chat["is_enabled"] else "❌ Off"
+        mode_btn = "🤖 AI" if chat["mode"] == "ai" else "👤 Manual"
+        
+        builder.row(
+            InlineKeyboardButton(text=status_btn, callback_data=f"toggle_on:{chat['chat_id']}"),
+            InlineKeyboardButton(text=mode_btn, callback_data=f"toggle_mode:{chat['chat_id']}")
+        )
+        builder.row(InlineKeyboardButton(text="📥 Export JSON", callback_data=f"export_chat:{chat['chat_id']}"))
+        
+        chat_title = chat["title"][:30] + "..." if len(chat["title"]) > 30 else chat["title"]
+        await message.answer(
+            f"🔹 **{chat_title}**\n`{chat['chat_id']}`",
+            reply_markup=builder.as_markup(),
+            parse_mode="Markdown"
+        )
+
+@router.callback_query(F.data.startswith("toggle_on:"))
+async def handle_toggle_on(callback: CallbackQuery, chat_control: ChatControlService):
+    chat_id = int(callback.data.split(":")[1])
+    new_val = await chat_control.toggle_enabled(chat_id)
+    
+    # Обновляем кнопки
+    builder = InlineKeyboardBuilder()
+    settings = await chat_control.get_status(chat_id)
+    status_btn = "✅ On" if new_val else "❌ Off"
+    mode_btn = "🤖 AI" if settings["mode"] == "ai" else "👤 Manual"
+    
+    builder.row(
+        InlineKeyboardButton(text=status_btn, callback_data=f"toggle_on:{chat_id}"),
+        InlineKeyboardButton(text=mode_btn, callback_data=f"toggle_mode:{chat_id}")
+    )
+    builder.row(InlineKeyboardButton(text="📥 Export JSON", callback_data=f"export_chat:{chat_id}"))
+    
+    await callback.message.edit_reply_markup(reply_markup=builder.as_markup())
+    await callback.answer(f"Бот {'включен' if new_val else 'выключен'}")
+
+@router.callback_query(F.data.startswith("toggle_mode:"))
+async def handle_toggle_mode(callback: CallbackQuery, chat_control: ChatControlService):
+    chat_id = int(callback.data.split(":")[1])
+    new_mode = await chat_control.toggle_mode(chat_id)
+    
+    builder = InlineKeyboardBuilder()
+    settings = await chat_control.get_status(chat_id)
+    status_btn = "✅ On" if settings["is_enabled"] else "❌ Off"
+    mode_btn = "🤖 AI" if new_mode == "ai" else "👤 Manual"
+    
+    builder.row(
+        InlineKeyboardButton(text=status_btn, callback_data=f"toggle_on:{chat_id}"),
+        InlineKeyboardButton(text=mode_btn, callback_data=f"toggle_mode:{chat_id}")
+    )
+    builder.row(InlineKeyboardButton(text="📥 Export JSON", callback_data=f"export_chat:{chat_id}"))
+    
+    await callback.message.edit_reply_markup(reply_markup=builder.as_markup())
+    await callback.answer(f"Режим изменен на {new_mode.upper()}")
+
+@router.callback_query(F.data.startswith("export_chat:"))
+async def handle_export_callback(callback: CallbackQuery, chat_control: ChatControlService):
+    chat_id = int(callback.data.split(":")[1])
+    history = await chat_control.get_chat_history_json(chat_id)
+    file = BufferedInputFile(history.encode('utf-8'), filename=f"history_{chat_id}.json")
+    await callback.message.answer_document(file, caption=f"Экспорт чата `{chat_id}`")
+    await callback.answer()
+
+@router.message(Command("say"))
+async def cmd_say(message: Message, bot: Bot):
+    parts = (message.text or "").split(maxsplit=2)
+    if len(parts) < 3:
+        return await message.answer("Формат: `/say <chat_id> <текст>`", parse_mode="Markdown")
+    
+    try:
+        target_chat_id = int(parts[1].strip())
+        text_to_send = parts[2]
+        await bot.send_message(target_chat_id, text_to_send)
+        try:
+            await message.react([{"type": "emoji", "emoji": "💬"}])
+        except Exception:
+            await message.answer("✅ Отправлено")
+    except Exception as e:
+        await message.answer(f"Ошибка: {e}")
 
 @router.message(Command("broadcast"))
 async def cmd_broadcast(message: Message, bot: Bot, chat_control: ChatControlService):
-    text = message.text.split(maxsplit=1)
-    if len(text) < 2:
+    text_parts = (message.text or "").split(maxsplit=1)
+    if len(text_parts) < 2:
         return await message.answer("Введите текст: /broadcast <сообщение>")
     
-    import asyncio
-    chat_ids = await chat_control._repository.get_all_active_chats()
+    chats_meta = await chat_control.get_chats_with_meta()
     count = 0
-    for cid in chat_ids:
-        settings = await chat_control.get_status(cid)
-        if not settings["is_enabled"]: continue
+    for chat in chats_meta:
+        if not chat["is_enabled"]:
+            continue
+        chat_id = chat["chat_id"]
         try:
-            await bot.send_message(cid, text[1])
+            await bot.send_message(chat_id, text_parts[1])
             count += 1
             await asyncio.sleep(0.05)
         except Exception: pass

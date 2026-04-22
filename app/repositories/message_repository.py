@@ -130,11 +130,18 @@ class MessageRepository:
             ''', [chat_id] + values + values)
             await db.commit()
 
-    async def get_all_active_chats(self) -> list[int]:
+    async def get_all_active_chats(self) -> list[dict]:
         async with aiosqlite.connect(self._database_path) as db:
-            async with db.execute('SELECT DISTINCT chat_id FROM messages') as cursor:
+            db.row_factory = aiosqlite.Row
+            # Получаем ID чата и самое последнее известное название из таблицы сообщений
+            async with db.execute('''
+                SELECT m.chat_id, 
+                       (SELECT m2.full_name FROM messages m2 WHERE m2.chat_id = m.chat_id ORDER BY m2.created_at DESC LIMIT 1) as last_title
+                FROM messages m
+                GROUP BY m.chat_id
+            ''') as cursor:
                 rows = await cursor.fetchall()
-                return [r[0] for r in rows]
+                return [dict(r) for r in rows]
 
     async def get_system_stats(self) -> dict:
         async with aiosqlite.connect(self._database_path) as db:
