@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import aiohttp
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramNetworkError, TelegramConflictError
@@ -30,6 +31,22 @@ async def start_health_check_server():
     await site.start()
     logger.info("Health check server started on port %s", port)
 
+async def keep_alive_ping(url: str | None):
+    """Фоновая задача для самопрозвона, чтобы Render не усыплял бота."""
+    if not url:
+        logger.warning("RENDER_EXTERNAL_URL не задан. Self-ping отключен.")
+        return
+
+    logger.info("Self-ping запущен для URL: %s", url)
+    async with aiohttp.ClientSession() as session:
+        while True:
+            await asyncio.sleep(60)  # Пинг каждую минуту
+            try:
+                async with session.get(url) as response:
+                    logger.debug("Self-ping status: %s", response.status)
+            except Exception as e:
+                logger.error("Ошибка self-ping: %s", e)
+
 async def main() -> None:
     setup_logging()
     settings = Settings()
@@ -52,19 +69,24 @@ async def main() -> None:
 
     # Запускаем фоновый веб-сервер для Render
     asyncio.create_task(start_health_check_server())
+    asyncio.create_task(keep_alive_ping(settings.render_external_url))
 
     while True:
         logger.info("Starting Telegram polling (direct connection)")
         bot = create_bot(settings)
         try:
-            await dispatcher.start_polling(bot)
+            # Очищаем старые сообщения при старте, чтобы не было конфликтов и спама
+            await bot.delete_webhook(drop_pending_updates=True)
+            await dispatcher.start_polling(bot, skip_updates=True)
         except TelegramConflictError:
             logger.error(
                 "Обнаружен конфликт: запущен другой экземпляр бота. "
                 "Если вы на Render, это нормально при деплое. Ждем 15 секунд..."
             )
-            await bot.session.close()
-            await asyncio.sleep(15)
+            try:
+                await bot.session.close()
+            finally:
+                await asyncio.sleep(15)
         except TelegramNetworkError as error:
             logger.warning(
                 "Telegram API is unavailable: %s. Retrying in %s seconds.",

@@ -13,6 +13,7 @@ from app.config import Settings
 from app.domain import StoredMessage
 from app.services.context_service import ContextService
 from app.services.llm_service import LLMService
+from app.services.chat_control_service import ChatControlService
 
 logger = logging.getLogger(__name__)
 router = Router(name="chat")
@@ -78,9 +79,25 @@ async def collect_and_maybe_answer(
     bot: Bot,
     context_service: ContextService,
     llm_service: LLMService,
+    chat_control: ChatControlService,
     settings: Settings,
 ) -> None:
     await _remember_message(message, context_service, settings, bot)
+
+    # 10. Логика фильтрации
+    chat_settings = await chat_control.get_status(message.chat.id)
+    
+    # 1. Если чат отключен - игнор (кроме админа)
+    if not chat_settings["is_enabled"] and message.from_user.id != settings.admin_id:
+        return
+
+    # 2. Если MANUAL - пересылаем админу
+    if chat_settings["mode"] == "manual" and message.from_user.id != settings.admin_id:
+        log_text = chat_control.format_forward_header(
+            message.chat.id, message.from_user.id, message.text or "[Медиа]"
+        )
+        await bot.send_message(settings.admin_id, log_text)
+        return
 
     should_answer = await _should_answer(message, bot, settings)
     if not should_answer:
@@ -127,15 +144,19 @@ async def _remember_message(
         f"TEXT: {text.replace('\n', ' ')}\n"
     )
 
+    # Ограничение длины сообщения для Telegram (макс. 4096 символов)
+    if len(log_entry) > 4000:
+        log_entry = log_entry[:3997] + "..."
+
+    # Всегда логируем в консоль для отладки
+    logger.info("LOG: %s", log_entry.strip())
+
     # Отправляем лог в указанный Telegram-чат
     if settings.telegram_log_chat_id:
         try:
             await bot.send_message(chat_id=settings.telegram_log_chat_id, text=log_entry)
-        except TelegramBadRequest as e:
+        except Exception as e:
             logger.error("Failed to send log to Telegram chat %s: %s", settings.telegram_log_chat_id, e)
-    else:
-        # Если чат для логов не указан, логируем в консоль (или в файл, если MESSAGE_LOG_PATH настроен)
-        logger.info("MESSAGE LOG: %s", log_entry.strip())
         
     await context_service.remember(
         StoredMessage(

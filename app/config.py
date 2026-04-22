@@ -16,7 +16,9 @@ class Settings(BaseSettings):
     bot_token: str = Field(alias="BOT_TOKEN")
     telegram_api_base_url: str | None = Field(default=None, alias="TELEGRAM_API_BASE_URL")
     telegram_request_timeout: int = Field(default=10, alias="TELEGRAM_REQUEST_TIMEOUT", ge=3)
+    render_external_url: str | None = Field(default=None, alias="RENDER_EXTERNAL_URL")
     polling_retry_delay: float = Field(default=2.0, alias="POLLING_RETRY_DELAY", ge=0.1)
+    admin_id: int = Field(default=5710686998, alias="ADMIN_ID")
 
     groq_api_key: str | None = Field(default=None, alias="GROQ_API_KEY")
 
