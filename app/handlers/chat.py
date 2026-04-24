@@ -299,12 +299,12 @@ async def _log_message(message: Message, settings: Settings, bot: Bot) -> None:
     user_info = f"ID: {user.id} | @{user.username if user.username else 'N/A'} ({user.full_name})"
     chat_link = f"https://t.me/{chat.username}" if chat.username else f"Private/ID: {chat.id}"
     chat_info = f"CHAT: {chat.title or 'Direct'} ({chat_link})"
-    
+    text_single_line = text.replace("\n", " ")
     log_entry = (
         f"[{timestamp}] "
         f"{user_info} | "
         f"{chat_info} | "
-        f"TEXT: {text.replace('\n', ' ')}\n"
+        f"TEXT: {text_single_line}\n"
     )
     
     logger.info("LOG: %s", log_entry.strip())
