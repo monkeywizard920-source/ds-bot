@@ -41,14 +41,20 @@ class MessageRepository:
                 CREATE TABLE IF NOT EXISTS chat_settings (
                     chat_id INTEGER PRIMARY KEY,
                     is_enabled BOOLEAN DEFAULT 1,
-                    mode TEXT DEFAULT 'ai',
-                    language TEXT DEFAULT '1'
+                    language TEXT DEFAULT '1',
+                    robin_mode BOOLEAN DEFAULT 0
                 )
                 """
             )
             # Миграция: добавляем колонку language, если её нет
             try:
                 await db.execute("ALTER TABLE chat_settings ADD COLUMN language TEXT DEFAULT '1'")
+            except aiosqlite.OperationalError:
+                # Колонка уже существует
+                pass
+            # Миграция: добавляем колонку robin_mode, если её нет
+            try:
+                await db.execute("ALTER TABLE chat_settings ADD COLUMN robin_mode BOOLEAN DEFAULT 0")
             except aiosqlite.OperationalError:
                 # Колонка уже существует
                 pass
@@ -118,17 +124,34 @@ class MessageRepository:
             return cursor.rowcount
 
     async def get_settings(self, chat_id: int) -> dict:
+        """Получает настройки чата или возвращает значения по умолчанию."""
         async with aiosqlite.connect(self._database_path) as db:
             db.row_factory = aiosqlite.Row
-            async with db.execute('SELECT * FROM chat_settings WHERE chat_id = ?', (chat_id,)) as cursor:
+            async with db.execute(
+                'SELECT * FROM chat_settings WHERE chat_id = ?', (chat_id,)
+            ) as cursor:
                 row = await cursor.fetchone()
-                return dict(row) if row else {"chat_id": chat_id, "is_enabled": True, "mode": "ai", "language": "1"}
+                if row:
+                    return dict(row)
+                
+                # Возвращаем значения по умолчанию для нового чата
+                return {
+                    "chat_id": chat_id,
+                    "is_enabled": True,
+                    "language": "1",
+                    "robin_mode": False
+                }
 
     async def update_settings(self, chat_id: int, **kwargs) -> None:
         async with aiosqlite.connect(self._database_path) as db:
             keys = list(kwargs.keys())
             values = list(kwargs.values())
             
+            if not keys: # Если просто "пингуем" чат
+                await db.execute("INSERT OR IGNORE INTO chat_settings (chat_id) VALUES (?)", (chat_id,))
+                await db.commit()
+                return
+
             set_clause = ", ".join([f"{k} = ?" for k in keys])
             placeholders = ", ".join(["?"] * len(keys))
             
@@ -144,19 +167,22 @@ class MessageRepository:
         async with aiosqlite.connect(self._database_path) as db:
             db.row_factory = aiosqlite.Row
             async with db.execute('''
-                SELECT t.chat_id, 
-                       (SELECT m.full_name FROM messages m WHERE m.chat_id = t.chat_id ORDER BY created_at DESC LIMIT 1) as last_title
-                FROM (
-                    SELECT chat_id FROM chat_settings
-                    UNION
-                    SELECT chat_id FROM messages
-                ) t
+                SELECT DISTINCT m.chat_id,
+                       CASE 
+                           WHEN m.chat_id < 0 THEN (SELECT full_name FROM messages WHERE chat_id = m.chat_id ORDER BY created_at DESC LIMIT 1)
+                           ELSE 'Private Chat'
+                       END as last_title
+                FROM messages m
+                UNION ALL
+                SELECT chat_id, 'Unknown Chat' as last_title
+                FROM chat_settings
+                WHERE chat_id NOT IN (SELECT DISTINCT chat_id FROM messages)
             ''') as cursor:
                 rows = await cursor.fetchall()
                 return [dict(r) for r in rows]
 
     async def get_system_stats(self) -> dict:
         async with aiosqlite.connect(self._database_path) as db:
-            async with db.execute('SELECT COUNT(*), SUM(CASE WHEN is_enabled=0 THEN 1 ELSE 0 END), SUM(CASE WHEN mode="manual" THEN 1 ELSE 0 END) FROM chat_settings') as cursor:
+            async with db.execute('SELECT COUNT(*), SUM(CASE WHEN is_enabled=0 THEN 1 ELSE 0 END) FROM chat_settings') as cursor:
                 row = await cursor.fetchone()
-                return {"total": row[0] or 0, "disabled": row[1] or 0, "manual": row[2] or 0}
+                return {"total": row[0] or 0, "disabled": row[1] or 0}

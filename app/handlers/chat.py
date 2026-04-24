@@ -5,15 +5,15 @@ import re
 from datetime import datetime, timezone
 
 from aiogram import Bot, F, Router
-from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command
 from aiogram.types import Message
 
 from app.config import Settings
 from app.domain import StoredMessage
+from app.services.chat_control_service import ChatControlService
 from app.services.context_service import ContextService
 from app.services.llm_service import LLMService
-from app.services.chat_control_service import ChatControlService
 
 logger = logging.getLogger(__name__)
 router = Router(name="chat")
@@ -28,31 +28,17 @@ async def chat_guard(handler, event: Message, data):
     chat_control: ChatControlService = data['chat_control']
     settings: Settings = data['settings']
     
-    # 1. Проверка прав администратора
-    uid = event.from_user.id if event.from_user else None
-    is_admin = uid in settings.admin_ids if uid else False
-
     if not event.from_user:
         return await handler(event, data)
 
     chat_settings = await chat_control.get_status(event.chat.id)
     
-    # 2. Если бот выключен — полный игнор для всех (кроме команд в админ-роутере)
+    # Если бот выключен в этом чате, полностью игнорируем все сообщения.
+    # Команды админов обрабатываются AdminFilter в admin_router, который имеет приоритет.
     if not chat_settings.get("is_enabled", True):
         return
 
     return await handler(event, data)
-
-
-@router.message(Command("start"))
-async def start(message: Message) -> None:
-    await message.answer(
-        "Привет. Я запоминаю новые сообщения в этом чате и отвечаю по ним, когда это полезно.\n\n"
-        "Команды:\n"
-        "Саня <вопрос> - спросить меня (например: Саня, что нового?)\n"
-        "/context - показать недавний сохраненный контекст\n"
-        "/reset_context - очистить контекст этого чата"
-    )
 
 
 @router.message(Command("context"))
@@ -63,6 +49,20 @@ async def show_context(
 ) -> None:
     preview = await context_service.preview(message.chat.id)
     await message.answer(preview[: settings.max_reply_chars])
+
+
+@router.message(Command("robin"))
+async def toggle_robin_mode(
+    message: Message,
+    chat_control: ChatControlService,
+) -> None:
+    chat_settings = await chat_control.get_status(message.chat.id)
+    current_mode = chat_settings.get("robin_mode", False)
+    new_mode = not current_mode
+    await chat_control.set_robin_mode(message.chat.id, new_mode)
+    
+    mode_text = "включен" if new_mode else "выключен"
+    await message.answer(f"Режим Robin {mode_text}. Бот будет {'отвечать на все сообщения' if new_mode else 'отвечать только на команды и обращения'}")
 
 
 @router.message(Command("reset_context"))
@@ -107,7 +107,7 @@ async def collect_and_maybe_answer(
     settings: Settings,
 ) -> None:
     await _remember_message(message, context_service, settings, bot)
-    should_answer = await _should_answer(message, bot, settings)
+    should_answer = await _should_answer(message, bot, settings, chat_control)
     if not should_answer:
         return
 
@@ -133,48 +133,34 @@ async def _remember_message(
     settings: Settings,
     bot: Bot,
 ) -> None:
-    # Проверяем, нужно ли игнорировать сообщение
-    uid = message.from_user.id if message.from_user else None
-    if uid and (uid in settings.excluded_ids or uid == settings.admin_id):
+    """Сохраняет сообщение в контексте и логирует его."""
+    # Регистрируем активность в чате
+    await context_service._repository.update_settings(message.chat.id, is_enabled=None)
+    
+    # Проверяем, нужно ли сохранять сообщение
+    user = message.from_user
+    if not user:
         return
 
+    user_id = user.id
+    if user_id in settings.excluded_ids or user_id in settings.admin_ids:
+        return
+    
     text = message.text or message.caption or ""
     if not text.strip():
         return
-
-    user = message.from_user
-    chat = message.chat
-    timestamp = _as_utc(message.date).strftime("%Y-%m-%d %H:%M:%S")
-
-    # Формируем данные для текстового лога
-    user_info = f"ID: {user.id if user else 'N/A'} | @{user.username if user else 'N/A'} ({user.full_name if user else 'Unknown'})"
-    chat_link = f"https://t.me/{chat.username}" if chat.username else f"Private/ID: {chat.id}"
-    chat_info = f"CHAT: {chat.title or 'Direct'} ({chat_link})"
     
-    log_entry = (
-        f"[{timestamp}] "
-        f"{user_info} | "
-        f"{chat_info} | "
-        f"TEXT: {text.replace('\n', ' ')}\n"
-    )
-
-    # Всегда логируем в консоль для отладки
-    logger.info("LOG: %s", log_entry.strip())
-
-    # Отправляем лог в указанный Telegram-чат
-    if settings.telegram_log_chat_id:
-        try:
-            await bot.send_message(chat_id=settings.telegram_log_chat_id, text=log_entry)
-        except Exception as e:
-            logger.error("Failed to send log to Telegram chat %s: %s", settings.telegram_log_chat_id, e)
-        
+    # Логируем сообщение
+    await _log_message(message, settings, bot)
+    
+    # Сохраняем сообщение в контексте
     await context_service.remember(
         StoredMessage(
             chat_id=message.chat.id,
             message_id=message.message_id,
-            user_id=user.id if user else None,
-            username=user.username if user else None,
-            full_name=user.full_name if user else None,
+            user_id=user_id,
+            username=user.username,
+            full_name=user.full_name,
             text=text,
             created_at=_as_utc(message.date),
         )
@@ -190,40 +176,63 @@ async def _answer_with_context(
     chat_control: ChatControlService,
     settings: Settings,
 ) -> None:
+    """Генерирует и отправляет ответ на сообщение."""
+    if not message.from_user:
+        return
+    
     context = await context_service.build_context(message.chat.id)
     global_lang = await chat_control.get_global_language()
-    is_admin = message.from_user.id in settings.admin_ids if message.from_user else False
+    is_admin = message.from_user.id in settings.admin_ids
 
     pending = await message.answer("Секунду...")
-    answer = await llm_service.answer(
-        context=context,
-        question=question,
-        chat_title=message.chat.title,
-        language=global_lang,
-        is_admin=is_admin
-    )
-    answer_text = answer[: settings.max_reply_chars]
     try:
+        answer = await llm_service.answer(
+            context=context,
+            question=question,
+            chat_title=message.chat.title,
+            language=global_lang,
+            is_admin=is_admin
+        )
+        answer_text = answer[: settings.max_reply_chars]
         await pending.edit_text(answer_text)
     except TelegramBadRequest:
-        await message.answer(answer_text)
+        await message.answer(answer[: settings.max_reply_chars])
+    except Exception as e:
+        logger.error("Ошибка при генерации ответа: %s", e)
+        await message.answer("Извините, произошла ошибка при генерации ответа.")
 
 
-async def _should_answer(message: Message, bot: Bot, settings: Settings) -> bool:
+async def _should_answer(
+    message: Message, 
+    bot: Bot, 
+    settings: Settings, 
+    chat_control: ChatControlService
+) -> bool:
+    """Определяет, должен ли бот отвечать на сообщение."""
+    chat_settings = await chat_control.get_status(message.chat.id)
+    
+    # Режим Robin - отвечать на все сообщения
+    if chat_settings.get("robin_mode", False):
+        return True
+    
+    # Глобальный режим ответа на все сообщения
     if settings.answer_on_every_message:
         return True
 
     text = message.text or message.caption or ""
+    
+    # Ответ на обращение "Саня"
     if SANYA_CALL_RE.match(text):
         return True
 
+    # Ответ на сообщение, адресованное боту
     if message.reply_to_message and message.reply_to_message.from_user:
-        if message.reply_to_message.from_user.id == bot.id:
+        if message.reply_to_message.from_user.id == (await _bot_user(bot)).id:
             return True
-
-    bot_user = await _bot_user(bot)
-    username = bot_user.username
-    if username and f"@{username.lower()}" in (message.text or message.caption or "").lower():
+    
+    # Ответ на упоминание бота
+    bot_username = await _bot_username(bot)
+    if bot_username and f"@{bot_username.lower()}" in text.lower():
         return True
 
     return False
@@ -275,6 +284,36 @@ def _remove_sanya_call(text: str) -> str:
 
     cleaned = match.group(1).strip()
     return cleaned or text
+
+
+async def _log_message(message: Message, settings: Settings, bot: Bot) -> None:
+    """Логирует сообщение в консоль и Telegram-чат."""
+    user = message.from_user
+    chat = message.chat
+    text = message.text or message.caption or ""
+    
+    if not user or user.id in settings.admin_ids or user.id in settings.excluded_ids:
+        return
+    
+    timestamp = _as_utc(message.date).strftime("%Y-%m-%d %H:%M:%S")
+    user_info = f"ID: {user.id} | @{user.username if user.username else 'N/A'} ({user.full_name})"
+    chat_link = f"https://t.me/{chat.username}" if chat.username else f"Private/ID: {chat.id}"
+    chat_info = f"CHAT: {chat.title or 'Direct'} ({chat_link})"
+    
+    log_entry = (
+        f"[{timestamp}] "
+        f"{user_info} | "
+        f"{chat_info} | "
+        f"TEXT: {text.replace('\n', ' ')}\n"
+    )
+    
+    logger.info("LOG: %s", log_entry.strip())
+    
+    if settings.telegram_log_chat_id:
+        try:
+            await bot.send_message(chat_id=settings.telegram_log_chat_id, text=log_entry)
+        except Exception as e:
+            logger.error("Failed to send log to Telegram chat %s: %s", settings.telegram_log_chat_id, e)
 
 
 def _as_utc(value: datetime) -> datetime:

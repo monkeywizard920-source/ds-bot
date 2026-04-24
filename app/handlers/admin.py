@@ -1,10 +1,11 @@
 from __future__ import annotations
+
 import asyncio
-from aiogram import Router, Bot, F, types
-from aiogram.filters import Command
-from aiogram.types import Message, BufferedInputFile, InlineKeyboardButton, CallbackQuery
+from aiogram import Bot, F, Router
+from aiogram.filters import BaseFilter, Command
+from aiogram.types import BufferedInputFile, CallbackQuery, InlineKeyboardButton, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-from aiogram.filters import BaseFilter
+
 from app.config import Settings
 from app.services.chat_control_service import ChatControlService
 
@@ -15,7 +16,8 @@ class AdminFilter(BaseFilter):
     async def __call__(self, message: Message, settings: Settings) -> bool:
         if not message.from_user:
             return False
-        return int(message.from_user.id) in settings.admin_ids
+        user_id = message.from_user.id
+        return user_id in settings.admin_ids
 
 # Применяем фильтр ко всем хендлерам в этом роутере
 router.message.filter(AdminFilter())
@@ -37,7 +39,6 @@ async def cmd_status(message: Message, chat_control: ChatControlService, setting
         f"📊 Статус системы:\n"
         f"Чатов в базе: {stats['total']}\n"
         f"Отключено: {stats['disabled']}\n"
-        f"Manual-режим: {stats['manual']}\n"
         f"Модель: `{settings.groq_model}` (DeepSeek 3.2)\n"
     )
     await message.answer(text, parse_mode="Markdown")
