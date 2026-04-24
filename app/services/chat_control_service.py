@@ -1,8 +1,8 @@
 from __future__ import annotations
+
 import json
-import re
 from app.repositories.message_repository import MessageRepository
-from app.domain import StoredMessage
+
 
 class ChatControlService:
     def __init__(self, repository: MessageRepository) -> None:
@@ -22,16 +22,19 @@ class ChatControlService:
         return new_status
 
     async def get_global_language(self) -> str:
+        """Получает глобальный язык системы."""
         settings = await self.get_status(0)  # ID 0 используется для глобальных настроек
         return settings.get("language", "1")
 
-        async def set_global_language(self, lang_code: str) -> None:
+    async def set_global_language(self, lang_code: str) -> None:
+        """Устанавливает глобальный язык системы."""
         await self._repository.update_settings(0, language=lang_code)
 
     async def set_robin_mode(self, chat_id: int, enabled: bool) -> None:
+        """Устанавливает режим Robin для чата."""
         await self._repository.update_settings(chat_id, robin_mode=enabled)
 
-        async def get_robin_mode(self, chat_id: int) -> bool:
+    async def get_robin_mode(self, chat_id: int) -> bool:
         """Получает текущий режим Robin для чата."""
         settings = await self.get_status(chat_id)
         return settings.get("robin_mode", False)
