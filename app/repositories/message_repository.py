@@ -143,12 +143,14 @@ class MessageRepository:
     async def get_all_active_chats(self) -> list[dict]:
         async with aiosqlite.connect(self._database_path) as db:
             db.row_factory = aiosqlite.Row
-            # Получаем ID чата и самое последнее известное название из таблицы сообщений
             async with db.execute('''
-                SELECT m.chat_id, 
-                       (SELECT m2.full_name FROM messages m2 WHERE m2.chat_id = m.chat_id ORDER BY m2.created_at DESC LIMIT 1) as last_title
-                FROM messages m
-                GROUP BY m.chat_id
+                SELECT t.chat_id, 
+                       (SELECT m.full_name FROM messages m WHERE m.chat_id = t.chat_id ORDER BY created_at DESC LIMIT 1) as last_title
+                FROM (
+                    SELECT chat_id FROM chat_settings
+                    UNION
+                    SELECT chat_id FROM messages
+                ) t
             ''') as cursor:
                 rows = await cursor.fetchall()
                 return [dict(r) for r in rows]

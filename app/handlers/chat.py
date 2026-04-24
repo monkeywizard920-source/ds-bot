@@ -28,27 +28,17 @@ async def chat_guard(handler, event: Message, data):
     chat_control: ChatControlService = data['chat_control']
     settings: Settings = data['settings']
     
-    # 1. Если пользователь в списке исключений или админ — пропускаем без ограничений (manual mode и т.д.)
+    # 1. Проверка прав администратора
     uid = event.from_user.id if event.from_user else None
-    if uid and (int(uid) in [int(i) for i in settings.excluded_ids] or int(uid) == int(settings.admin_id)):
-        return await handler(event, data)
+    is_admin = uid in settings.admin_ids if uid else False
 
     if not event.from_user:
         return await handler(event, data)
 
     chat_settings = await chat_control.get_status(event.chat.id)
     
-    # 1. Если бот выключен — полный игнор
+    # 2. Если бот выключен — полный игнор для всех (кроме команд в админ-роутере)
     if not chat_settings.get("is_enabled", True):
-        return
-
-    # 2. Если ручной режим — пересылка админу и остановка (команды пропускаем)
-    if chat_settings.get("mode") == "manual" and not (event.text or "").startswith("/"):
-        bot: Bot = data['bot']
-        log_text = chat_control.format_forward_header(
-            event.chat.id, event.from_user.id, event.text or event.caption or "[Медиа]"
-        )
-        await bot.send_message(settings.admin_id, log_text)
         return
 
     return await handler(event, data)
@@ -202,12 +192,15 @@ async def _answer_with_context(
 ) -> None:
     context = await context_service.build_context(message.chat.id)
     global_lang = await chat_control.get_global_language()
+    is_admin = message.from_user.id in settings.admin_ids if message.from_user else False
+
     pending = await message.answer("Секунду...")
     answer = await llm_service.answer(
         context=context,
         question=question,
         chat_title=message.chat.title,
-        language=global_lang
+        language=global_lang,
+        is_admin=is_admin
     )
     answer_text = answer[: settings.max_reply_chars]
     try:

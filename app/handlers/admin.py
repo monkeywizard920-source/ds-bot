@@ -15,7 +15,7 @@ class AdminFilter(BaseFilter):
     async def __call__(self, message: Message, settings: Settings) -> bool:
         if not message.from_user:
             return False
-        return int(message.from_user.id) == int(settings.admin_id)
+        return int(message.from_user.id) in settings.admin_ids
 
 # Применяем фильтр ко всем хендлерам в этом роутере
 router.message.filter(AdminFilter())
@@ -29,21 +29,6 @@ async def cmd_on(message: Message, chat_control: ChatControlService):
 async def cmd_off(message: Message, chat_control: ChatControlService):
     await chat_control.set_enabled(message.chat.id, False)
     await message.answer("Бот выключен.")
-
-@router.message(Command("manual"))
-async def cmd_manual(message: Message, chat_control: ChatControlService):
-    await chat_control.set_mode(message.chat.id, "manual")
-    await message.answer("Режим: MANUAL (Перехват сообщений).")
-
-@router.message(Command("auto"))
-async def cmd_auto(message: Message, chat_control: ChatControlService):
-    await chat_control.set_mode(message.chat.id, "ai")
-    await message.answer("Режим: AI (DeepSeek).")
-
-@router.message(Command("mode"))
-async def cmd_toggle(message: Message, chat_control: ChatControlService):
-    mode = await chat_control.toggle_mode(message.chat.id)
-    await message.answer(f"Режим изменен на: {mode.upper()}")
 
 @router.message(Command("status"))
 async def cmd_status(message: Message, chat_control: ChatControlService, settings: Settings):
@@ -72,16 +57,11 @@ async def cmd_chats(message: Message, chat_control: ChatControlService):
     for chat in chats:
         builder = InlineKeyboardBuilder()
         is_on = chat.get("is_enabled", True)
-        mode = chat.get("mode", "ai")
         chat_id = chat["chat_id"]
 
         status_btn = "✅ On" if is_on else "❌ Off"
-        mode_btn = "🤖 AI" if mode == "ai" else "👤 Manual"
         
-        builder.row(
-            InlineKeyboardButton(text=status_btn, callback_data=f"toggle_on:{chat_id}"),
-            InlineKeyboardButton(text=mode_btn, callback_data=f"toggle_mode:{chat_id}")
-        )
+        builder.row(InlineKeyboardButton(text=status_btn, callback_data=f"toggle_on:{chat_id}"))
         builder.row(InlineKeyboardButton(text="📥 Export JSON", callback_data=f"export_chat:{chat_id}"))
         
         raw_title = str(chat.get("title") or "Unknown")
@@ -99,37 +79,13 @@ async def handle_toggle_on(callback: CallbackQuery, chat_control: ChatControlSer
     
     # Обновляем кнопки
     builder = InlineKeyboardBuilder()
-    settings = await chat_control.get_status(chat_id)
     status_btn = "✅ On" if new_val else "❌ Off"
-    mode_btn = "🤖 AI" if settings["mode"] == "ai" else "👤 Manual"
     
-    builder.row(
-        InlineKeyboardButton(text=status_btn, callback_data=f"toggle_on:{chat_id}"),
-        InlineKeyboardButton(text=mode_btn, callback_data=f"toggle_mode:{chat_id}")
-    )
+    builder.row(InlineKeyboardButton(text=status_btn, callback_data=f"toggle_on:{chat_id}"))
     builder.row(InlineKeyboardButton(text="📥 Export JSON", callback_data=f"export_chat:{chat_id}"))
     
     await callback.message.edit_reply_markup(reply_markup=builder.as_markup())
     await callback.answer(f"Бот {'включен' if new_val else 'выключен'}")
-
-@router.callback_query(F.data.startswith("toggle_mode:"))
-async def handle_toggle_mode(callback: CallbackQuery, chat_control: ChatControlService):
-    chat_id = int(callback.data.split(":")[1])
-    new_mode = await chat_control.toggle_mode(chat_id)
-    
-    builder = InlineKeyboardBuilder()
-    settings = await chat_control.get_status(chat_id)
-    status_btn = "✅ On" if settings["is_enabled"] else "❌ Off"
-    mode_btn = "🤖 AI" if new_mode == "ai" else "👤 Manual"
-    
-    builder.row(
-        InlineKeyboardButton(text=status_btn, callback_data=f"toggle_on:{chat_id}"),
-        InlineKeyboardButton(text=mode_btn, callback_data=f"toggle_mode:{chat_id}")
-    )
-    builder.row(InlineKeyboardButton(text="📥 Export JSON", callback_data=f"export_chat:{chat_id}"))
-    
-    await callback.message.edit_reply_markup(reply_markup=builder.as_markup())
-    await callback.answer(f"Режим изменен на {new_mode.upper()}")
 
 @router.callback_query(F.data.startswith("export_chat:"))
 async def handle_export_callback(callback: CallbackQuery, chat_control: ChatControlService):
