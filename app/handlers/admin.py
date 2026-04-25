@@ -27,6 +27,32 @@ class AdminFilter(BaseFilter):
 # Применяем фильтр ко всем хендлерам в этом роутере
 router.message.filter(AdminFilter())
 
+@router.message(Command("off"))
+async def cmd_off(message: Message, chat_control: ChatControlService):
+    parts = (message.text or "").split()
+    target_id = message.chat.id
+    if len(parts) > 1:
+        try:
+            target_id = int(parts[1])
+        except ValueError:
+            return await message.answer("ID чата должен быть числом.")
+    
+    await chat_control.set_enabled(target_id, is_enabled=False)
+    await message.answer(f"❌ Бот выключен в чате `{target_id}`", parse_mode="Markdown")
+
+@router.message(Command("on"))
+async def cmd_on(message: Message, chat_control: ChatControlService):
+    parts = (message.text or "").split()
+    target_id = message.chat.id
+    if len(parts) > 1:
+        try:
+            target_id = int(parts[1])
+        except ValueError:
+            return await message.answer("ID чата должен быть числом.")
+    
+    await chat_control.set_enabled(target_id, is_enabled=True)
+    await message.answer(f"✅ Бот включен в чате `{target_id}`", parse_mode="Markdown")
+
 @router.message(Command("status"))
 async def cmd_status(message: Message, chat_control: ChatControlService, settings: Settings):
     stats = await chat_control.get_system_wide_stats()

@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     excluded_ids: list[int] = Field(default=[], alias="EXCLUDED_IDS")
 
     groq_api_key: str | None = Field(default=None, alias="GROQ_API_KEY")
+    two_api_key: str | None = Field(default=None, alias="TWO_API_KEY")
+    tree_api_key: str | None = Field(default=None, alias="TREE_API_KEY")
+    four_api_key: str | None = Field(default=None, alias="FOUR_API_KEY")
+    five_api_key: str | None = Field(default=None, alias="FIVE_API_KEY")
     groq_model: str = Field(default="llama-3.3-70b-versatile", alias="GROQ_MODEL")
     openai_base_url: str = Field(default="https://api.groq.com/openai/v1", alias="OPENAI_BASE_URL")
 

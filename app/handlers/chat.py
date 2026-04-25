@@ -25,8 +25,17 @@ _BOT_USERNAME: str | None = None
 @router.message.middleware()
 async def chat_guard(handler, event: Message, data):
     """Глобальный фильтр состояния чата (ВКЛ/ВЫКЛ/MANUAL)."""
+    chat_control: ChatControlService = data.get('chat_control')
+    
     if not event.from_user:
         return await handler(event, data)
+
+    if chat_control:
+        chat_settings = await chat_control.get_status(event.chat.id)
+        # Блокируем ТОЛЬКО если статус явно равен False (0 в БД). 
+        # Если там None или True — продолжаем работу.
+        if chat_settings.get("is_enabled") is False:
+            return
 
     return await handler(event, data)
 
@@ -46,12 +55,12 @@ async def toggle_robin_mode(
     message: Message,
     chat_control: ChatControlService,
 ) -> None:
-    settings = await chat_control.get_status(message.chat.id)
-    new_mode = not settings.get("robin_mode", False)
-    await chat_control.set_enabled(message.chat.id, is_enabled=True, robin_mode=new_mode)
+    current_mode = await chat_control.get_global_robin_mode()
+    new_mode = not current_mode
+    await chat_control.set_global_robin_mode(new_mode)
     
-    status = "ВКЛЮЧЕН (отвечаю на всё)" if new_mode else "ВЫКЛЮЧЕН (отвечаю на упоминания)"
-    await message.answer(f"Режим Robin: {status}")
+    status = "ВКЛЮЧЕН глобально (отвечаю на всё во всех чатах)" if new_mode else "ВЫКЛЮЧЕН (отвечаю на упоминания)"
+    await message.answer(f"📢 Режим Robin: {status}")
 
 
 @router.message(Command("reset_context"))
@@ -203,8 +212,8 @@ async def _should_answer(
     if message.text and message.text.startswith('/'):
         return False
     
-    chat_settings = await chat_control.get_status(message.chat.id)
-    if chat_settings.get("robin_mode", False):
+    # Проверка глобального режима Robin
+    if await chat_control.get_global_robin_mode():
         return True
 
     # Глобальный режим ответа на все сообщения
