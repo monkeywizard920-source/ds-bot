@@ -15,6 +15,7 @@ from app.logging_config import setup_logging
 from app.repositories.message_repository import MessageRepository
 from app.services.context_service import ContextService
 from app.services.llm_service import LLMService
+from app.services.proxy_service import ProxyService
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +51,11 @@ async def keep_alive_ping(url: str | None):
 async def main() -> None:
     setup_logging()
     settings = Settings()
+
+    # Инициализируем прокси-сервис
+    proxy_service = ProxyService(settings.proxy_file)
+    await proxy_service.load_proxies()
+    await proxy_service.find_working_proxy()
 
     repository = MessageRepository(settings.database_path)
     await repository.init()
@@ -94,6 +100,8 @@ async def main() -> None:
                 settings.polling_retry_delay,
             )
             await bot.session.close()
+            # Пробуем сменить прокси при ошибке сети
+            await proxy_service.rotate_proxy()
             await asyncio.sleep(settings.polling_retry_delay)
         else:
             break

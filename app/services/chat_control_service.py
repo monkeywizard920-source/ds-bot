@@ -12,15 +12,6 @@ class ChatControlService:
         """Получает текущие настройки чата."""
         return await self._repository.get_settings(chat_id)
 
-    async def set_enabled(self, chat_id: int, enabled: bool) -> None:
-        await self._repository.update_settings(chat_id, is_enabled=enabled)
-
-    async def toggle_enabled(self, chat_id: int) -> bool:
-        settings = await self.get_status(chat_id)
-        new_status = not settings.get("is_enabled", True)
-        await self.set_enabled(chat_id, new_status)
-        return new_status
-
     async def get_global_language(self) -> str:
         """Получает глобальный язык системы."""
         settings = await self.get_status(0)  # ID 0 используется для глобальных настроек
@@ -29,15 +20,6 @@ class ChatControlService:
     async def set_global_language(self, lang_code: str) -> None:
         """Устанавливает глобальный язык системы."""
         await self._repository.update_settings(0, language=lang_code)
-
-    async def set_robin_mode(self, chat_id: int, enabled: bool) -> None:
-        """Устанавливает режим Robin для чата."""
-        await self._repository.update_settings(chat_id, robin_mode=enabled)
-
-    async def get_robin_mode(self, chat_id: int) -> bool:
-        """Получает текущий режим Robin для чата."""
-        settings = await self.get_status(chat_id)
-        return settings.get("robin_mode", False)
 
     async def get_system_wide_stats(self) -> dict:
         return await self._repository.get_system_stats()

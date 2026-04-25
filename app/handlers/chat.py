@@ -25,18 +25,8 @@ _BOT_USERNAME: str | None = None
 @router.message.middleware()
 async def chat_guard(handler, event: Message, data):
     """Глобальный фильтр состояния чата (ВКЛ/ВЫКЛ/MANUAL)."""
-    chat_control: ChatControlService = data['chat_control']
-    settings: Settings = data['settings']
-    
     if not event.from_user:
         return await handler(event, data)
-
-    chat_settings = await chat_control.get_status(event.chat.id)
-    
-    # Если бот выключен в этом чате, полностью игнорируем все сообщения.
-    # Команды админов обрабатываются AdminFilter в admin_router, который имеет приоритет.
-    if not chat_settings.get("is_enabled", True):
-        return
 
     return await handler(event, data)
 
@@ -56,13 +46,12 @@ async def toggle_robin_mode(
     message: Message,
     chat_control: ChatControlService,
 ) -> None:
-    chat_settings = await chat_control.get_status(message.chat.id)
-    current_mode = chat_settings.get("robin_mode", False)
-    new_mode = not current_mode
-    await chat_control.set_robin_mode(message.chat.id, new_mode)
+    settings = await chat_control.get_status(message.chat.id)
+    new_mode = not settings.get("robin_mode", False)
+    await chat_control.set_enabled(message.chat.id, is_enabled=True, robin_mode=new_mode)
     
-    mode_text = "включен" if new_mode else "выключен"
-    await message.answer(f"Режим Robin {mode_text}. Бот будет {'отвечать на все сообщения' if new_mode else 'отвечать только на команды и обращения'}")
+    status = "ВКЛЮЧЕН (отвечаю на всё)" if new_mode else "ВЫКЛЮЧЕН (отвечаю на упоминания)"
+    await message.answer(f"Режим Robin: {status}")
 
 
 @router.message(Command("reset_context"))
@@ -109,6 +98,7 @@ async def collect_and_maybe_answer(
     await _remember_message(message, context_service, settings, bot)
     should_answer = await _should_answer(message, bot, settings, chat_control)
     if not should_answer:
+        logger.debug(f"Should not answer in chat {message.chat.id}")
         return
 
     text = message.text or message.caption or ""
@@ -117,6 +107,7 @@ async def collect_and_maybe_answer(
     if not question:
         question = text.strip()
 
+    logger.debug(f"Answering in chat {message.chat.id}")
     await _answer_with_context(
         message=message,
         question=question,
@@ -134,26 +125,25 @@ async def _remember_message(
     bot: Bot,
 ) -> None:
     """Сохраняет сообщение в контексте и логирует его."""
-    # Регистрируем активность в чате
-    await context_service._repository.update_settings(message.chat.id, is_enabled=None)
+    # Регистрируем чат в базе (без изменения статуса ВКЛ/ВЫКЛ)
+    await context_service._repository.update_settings(message.chat.id)
     
     # Проверяем, нужно ли сохранять сообщение
     user = message.from_user
     if not user:
         return
 
-    user_id = user.id
-    if user_id in settings.excluded_ids or user_id in settings.admin_ids:
-        return
-    
     text = message.text or message.caption or ""
     if not text.strip():
         return
     
-    # Логируем сообщение
-    await _log_message(message, settings, bot)
+    user_id = user.id
     
-    # Сохраняем сообщение в контексте
+    # Логируем сообщение (кроме администраторов и исключенных пользователей)
+    if user_id not in settings.admin_ids and user_id not in settings.excluded_ids:
+        await _log_message(message, settings, bot)
+    
+    # Сохраняем сообщение в контексте (включая администраторов)
     await context_service.remember(
         StoredMessage(
             chat_id=message.chat.id,
@@ -205,16 +195,18 @@ async def _answer_with_context(
 async def _should_answer(
     message: Message, 
     bot: Bot, 
-    settings: Settings, 
-    chat_control: ChatControlService
+    settings: Settings,
+    chat_control: ChatControlService,
 ) -> bool:
     """Определяет, должен ли бот отвечать на сообщение."""
-    chat_settings = await chat_control.get_status(message.chat.id)
+    # Не отвечаем на команды
+    if message.text and message.text.startswith('/'):
+        return False
     
-    # Режим Robin - отвечать на все сообщения
+    chat_settings = await chat_control.get_status(message.chat.id)
     if chat_settings.get("robin_mode", False):
         return True
-    
+
     # Глобальный режим ответа на все сообщения
     if settings.answer_on_every_message:
         return True

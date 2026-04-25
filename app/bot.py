@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from aiogram import Bot, Dispatcher
 from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.client.telegram import TelegramAPIServer
@@ -10,6 +11,9 @@ from app.handlers.admin import router as admin_router
 from app.services.context_service import ContextService
 from app.services.llm_service import LLMService
 from app.services.chat_control_service import ChatControlService
+from app.services.proxy_service import ProxyService
+
+logger = logging.getLogger(__name__)
 
 
 def create_bot(settings: Settings) -> Bot:
@@ -17,11 +21,22 @@ def create_bot(settings: Settings) -> Bot:
     if settings.telegram_api_base_url:
         session_kwargs["api"] = TelegramAPIServer.from_base(settings.telegram_api_base_url)
 
+    # Настраиваем прокси
+    proxy_service = ProxyService(settings.proxy_file)
+    proxy = proxy_service.get_current_proxy()
+    if proxy:
+        session_kwargs["proxy"] = proxy
+        logger.info(f"Using proxy: {proxy}")
+    else:
+        logger.warning("No working proxy found, connecting directly")
+
     session = AiohttpSession(
         timeout=settings.telegram_request_timeout,
         **session_kwargs,
     )
-    return Bot(token=settings.bot_token, session=session)
+    bot = Bot(token=settings.bot_token, session=session)
+    logger.info(f"Bot created with token: {settings.bot_token[:5]}...")
+    return bot
 
 
 def create_dispatcher(

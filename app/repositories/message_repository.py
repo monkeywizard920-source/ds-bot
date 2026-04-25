@@ -56,7 +56,6 @@ class MessageRepository:
             try:
                 await db.execute("ALTER TABLE chat_settings ADD COLUMN robin_mode BOOLEAN DEFAULT 0")
             except aiosqlite.OperationalError:
-                # Колонка уже существует
                 pass
             await db.commit()
 
@@ -132,7 +131,10 @@ class MessageRepository:
             ) as cursor:
                 row = await cursor.fetchone()
                 if row:
-                    return dict(row)
+                    data = dict(row)
+                    # Принудительно приводим к bool, чтобы избежать проблем с NULL/None
+                    data["is_enabled"] = bool(data.get("is_enabled", True))
+                    return data
                 
                 # Возвращаем значения по умолчанию для нового чата
                 return {
@@ -143,40 +145,41 @@ class MessageRepository:
                 }
 
     async def update_settings(self, chat_id: int, **kwargs) -> None:
-        async with aiosqlite.connect(self._database_path) as db:
-            keys = list(kwargs.keys())
-            values = list(kwargs.values())
-            
-            if not keys: # Если просто "пингуем" чат
-                await db.execute("INSERT OR IGNORE INTO chat_settings (chat_id) VALUES (?)", (chat_id,))
-                await db.commit()
-                return
+        # Очищаем kwargs от None, чтобы не затереть существующие настройки при "пинге" чата
+        updates = {k: v for k, v in kwargs.items() if v is not None}
 
-            set_clause = ", ".join([f"{k} = ?" for k in keys])
-            placeholders = ", ".join(["?"] * len(keys))
-            
-            # Для SQLite ON CONFLICT нам нужно передать значения дважды: для INSERT и для UPDATE
-            await db.execute(f'''
-                INSERT INTO chat_settings (chat_id, {", ".join(keys)})
-                VALUES (?, {placeholders})
-                ON CONFLICT(chat_id) DO UPDATE SET {set_clause}
-            ''', [chat_id] + values + values)
+        async with aiosqlite.connect(self._database_path) as db:
+            if not updates:
+                # Просто регистрируем чат, если его нет
+                await db.execute("INSERT OR IGNORE INTO chat_settings (chat_id) VALUES (?)", (chat_id,))
+            else:
+                keys = list(updates.keys())
+                values = list(updates.values())
+                set_clause = ", ".join([f"{k} = ?" for k in keys])
+                placeholders = ", ".join(["?"] * len(keys))
+
+                # Для SQLite ON CONFLICT нам нужно передать значения дважды: для INSERT и для UPDATE
+                await db.execute(f'''
+                    INSERT INTO chat_settings (chat_id, {", ".join(keys)})
+                    VALUES (?, {placeholders})
+                    ON CONFLICT(chat_id) DO UPDATE SET {set_clause}
+                ''', [chat_id] + values + values)
             await db.commit()
 
     async def get_all_active_chats(self) -> list[dict]:
         async with aiosqlite.connect(self._database_path) as db:
             db.row_factory = aiosqlite.Row
             async with db.execute('''
-                SELECT DISTINCT m.chat_id,
-                       CASE 
-                           WHEN m.chat_id < 0 THEN (SELECT full_name FROM messages WHERE chat_id = m.chat_id ORDER BY created_at DESC LIMIT 1)
-                           ELSE 'Private Chat'
-                       END as last_title
-                FROM messages m
-                UNION ALL
-                SELECT chat_id, 'Unknown Chat' as last_title
-                FROM chat_settings
-                WHERE chat_id NOT IN (SELECT DISTINCT chat_id FROM messages)
+                SELECT t.chat_id, 
+                       COALESCE(
+                           (SELECT m.full_name FROM messages m WHERE m.chat_id = t.chat_id ORDER BY created_at DESC LIMIT 1),
+                           CASE WHEN t.chat_id > 0 THEN 'Private Chat' ELSE 'Unknown Group' END
+                       ) as last_title
+                FROM (
+                    SELECT chat_id FROM chat_settings WHERE chat_id != 0
+                    UNION
+                    SELECT chat_id FROM messages
+                ) t
             ''') as cursor:
                 rows = await cursor.fetchall()
                 return [dict(r) for r in rows]

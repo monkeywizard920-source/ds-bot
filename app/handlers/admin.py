@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from aiogram import Bot, F, Router
 from aiogram.filters import BaseFilter, Command
 from aiogram.types import BufferedInputFile, CallbackQuery, InlineKeyboardButton, Message
@@ -8,6 +9,8 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from app.config import Settings
 from app.services.chat_control_service import ChatControlService
+
+logger = logging.getLogger(__name__)
 
 router = Router(name="admin")
 
@@ -17,20 +20,12 @@ class AdminFilter(BaseFilter):
         if not message.from_user:
             return False
         user_id = message.from_user.id
+        # Логируем проверку администраторов для отладки
+        logger.info(f"Checking admin rights for user {user_id}. Admins: {settings.admin_ids}")
         return user_id in settings.admin_ids
 
 # Применяем фильтр ко всем хендлерам в этом роутере
 router.message.filter(AdminFilter())
-
-@router.message(Command("on"))
-async def cmd_on(message: Message, chat_control: ChatControlService):
-    await chat_control.set_enabled(message.chat.id, True)
-    await message.answer("Бот включен в этом чате.")
-
-@router.message(Command("off"))
-async def cmd_off(message: Message, chat_control: ChatControlService):
-    await chat_control.set_enabled(message.chat.id, False)
-    await message.answer("Бот выключен.")
 
 @router.message(Command("status"))
 async def cmd_status(message: Message, chat_control: ChatControlService, settings: Settings):
@@ -55,38 +50,34 @@ async def cmd_chats(message: Message, chat_control: ChatControlService):
     if not chats:
         return await message.answer("Список чатов пуст.")
 
-    for chat in chats:
-        builder = InlineKeyboardBuilder()
-        is_on = chat.get("is_enabled", True)
-        chat_id = chat["chat_id"]
-
-        status_btn = "✅ On" if is_on else "❌ Off"
-        
-        builder.row(InlineKeyboardButton(text=status_btn, callback_data=f"toggle_on:{chat_id}"))
-        builder.row(InlineKeyboardButton(text="📥 Export JSON", callback_data=f"export_chat:{chat_id}"))
-        
-        raw_title = str(chat.get("title") or "Unknown")
-        chat_title = (raw_title[:30] + "...") if len(raw_title) > 30 else raw_title
-        await message.answer(
-            f"🔹 **{chat_title}**\n`{chat_id}`",
-            reply_markup=builder.as_markup(),
-            parse_mode="Markdown"
-        )
-
-@router.callback_query(F.data.startswith("toggle_on:"))
-async def handle_toggle_on(callback: CallbackQuery, chat_control: ChatControlService):
-    chat_id = int(callback.data.split(":")[1])
-    new_val = await chat_control.toggle_enabled(chat_id)
+    # Группируем чаты по типам
+    group_chats = [c for c in chats if c["chat_id"] < 0]
+    private_chats = [c for c in chats if c["chat_id"] > 0]
     
-    # Обновляем кнопки
-    builder = InlineKeyboardBuilder()
-    status_btn = "✅ On" if new_val else "❌ Off"
+    response = "📋 **Список чатов:**\n\n"
     
-    builder.row(InlineKeyboardButton(text=status_btn, callback_data=f"toggle_on:{chat_id}"))
-    builder.row(InlineKeyboardButton(text="📥 Export JSON", callback_data=f"export_chat:{chat_id}"))
+    # Групповые чаты
+    if group_chats:
+        response += "👥 *Групповые чаты:*\n"
+        for chat in group_chats[:10]:  # Ограничиваем количество групповых чатов
+            is_on = chat.get("is_enabled", True)
+            status_emoji = "✅" if is_on else "❌"
+            chat_title = chat.get("title", "Unknown") or f"ID: {chat['chat_id']}"
+            response += f"{status_emoji} `{chat['chat_id']}` - {chat_title}\n"
     
-    await callback.message.edit_reply_markup(reply_markup=builder.as_markup())
-    await callback.answer(f"Бот {'включен' if new_val else 'выключен'}")
+    # Личные чаты
+    if private_chats:
+        response += "\n👤 *Личные чаты:*\n"
+        for chat in private_chats[:5]:  # Ограничиваем количество личных чатов
+            chat_title = chat.get("title", "Unknown") or f"ID: {chat['chat_id']}"
+            response += f"🔹 `{chat['chat_id']}` - {chat_title}\n"
+    
+    # Если есть еще чаты
+    total_chats = len(chats)
+    if total_chats > 15:
+        response += f"\n📊 *Всего чатов:* {total_chats} (показано 15)"
+    
+    await message.answer(response, parse_mode="Markdown")
 
 @router.callback_query(F.data.startswith("export_chat:"))
 async def handle_export_callback(callback: CallbackQuery, chat_control: ChatControlService):

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -36,3 +36,10 @@ class Settings(BaseSettings):
     max_context_chars: int = Field(default=12000, alias="MAX_CONTEXT_CHARS", ge=1)
     max_reply_chars: int = Field(default=4096, alias="MAX_REPLY_CHARS", ge=1)
     answer_on_every_message: bool = Field(default=False, alias="ANSWER_ON_EVERY_MESSAGE")
+    proxy_file: Path = Field(default=Path("proxies.txt"), alias="PROXY_FILE")
+    
+    @field_validator("max_context_messages", mode="before")
+    def validate_max_context_messages(cls, v):
+        if v == "" or v is None:
+            return 40
+        return v
