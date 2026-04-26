@@ -93,16 +93,28 @@ async def main() -> None:
     asyncio.create_task(keep_alive_ping(settings.render_external_url))
 
     logger.info("Starting Discord bot...")
+    retry_delay = settings.discord_retry_delay
     while True:
         try:
             async with bot:
                 await bot.start(settings.discord_token)
+            # Если соединение закрылось штатно, сбрасываем задержку
+            retry_delay = settings.discord_retry_delay
         except discord.errors.LoginFailure:
             logger.error("Critical: Invalid Discord token provided. Check your .env file.")
             break
+        except discord.errors.HTTPException as e:
+            if e.status == 429:
+                logger.error("Discord Rate Limit (429/1015). Cloudflare блокирует этот IP. "
+                             "Ждем %ds перед повтором...", retry_delay)
+            else:
+                logger.error("Discord HTTP error: %s. Retrying in %ds...", e, retry_delay)
+            await asyncio.sleep(retry_delay)
+            retry_delay = min(retry_delay * 2, 900)  # Увеличиваем задержку до 15 минут
         except Exception as e:
-            logger.error("Discord connection error: %s. Retrying in %ds...", e, settings.discord_retry_delay)
-            await asyncio.sleep(settings.discord_retry_delay)
+            logger.error("Discord connection error: %s. Retrying in %ds...", e, retry_delay)
+            await asyncio.sleep(retry_delay)
+            retry_delay = min(retry_delay * 2, 900)
 
 if __name__ == "__main__":
     asyncio.run(main())

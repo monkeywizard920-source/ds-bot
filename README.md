@@ -44,6 +44,4 @@ app/
 
 ## Notes
 
-The default model is `deepseek-chat` with `https://api.deepseek.com`.
-For another OpenAI-compatible provider, change `OPENAI_BASE_URL`, `OPENAI_MODEL`, and set `OPENAI_API_KEY`.
-The bot can rotate through LLM models using `LLM_MODELS`, comma-separated.
+Бот работает через Groq API. В логах при запуске отображается, какой URL и какой ключ используются для запросов.

@@ -8,6 +8,25 @@ from app.domain import StoredMessage
 logger = logging.getLogger(__name__)
 SANYA_CALL_RE = re.compile(r"^\s*саня\b[\s,.:;!?-]*(.*)$", re.IGNORECASE)
 
+class DiscordLogHandler(logging.Handler):
+    """Отправляет логи уровня INFO и выше в указанный канал Discord."""
+    def __init__(self, bot: commands.Bot, channel_id: int):
+        super().__init__()
+        self.bot = bot
+        self.channel_id = channel_id
+        self.setLevel(logging.INFO)
+
+    def emit(self, record):
+        if not self.bot.is_ready():
+            return
+        log_entry = self.format(record)
+        self.bot.loop.create_task(self.send_log(log_entry))
+
+    async def send_log(self, message: str):
+        channel = self.bot.get_channel(self.channel_id)
+        if channel:
+            await channel.send(f"```\n{message[:1990]}\n```")
+
 def setup_discord_handlers(bot: commands.Bot):
     settings = bot.settings
 
@@ -19,6 +38,12 @@ def setup_discord_handlers(bot: commands.Bot):
 
     @bot.event
     async def on_ready():
+        # Настройка удаленного логирования после запуска бота
+        if settings.discord_log_channel_id:
+            discord_handler = DiscordLogHandler(bot, settings.discord_log_channel_id)
+            discord_handler.setFormatter(logging.Formatter('%(name)s: %(message)s'))
+            logging.getLogger().addHandler(discord_handler)
+            
         logger.info(f"Logged in as {bot.user} (ID: {bot.user.id})")
         logger.info(f"Loaded Admin IDs: {settings.admin_ids}")
         logger.info(f"Active Command Prefix: {bot.command_prefix}")
