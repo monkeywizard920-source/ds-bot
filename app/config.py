@@ -18,6 +18,7 @@ class Settings(BaseSettings):
 
     discord_token: str = Field(alias="DISCORD_TOKEN")
     command_prefix: str = Field(default="!", alias="COMMAND_PREFIX")
+    discord_retry_delay: int = Field(default=60, alias="DISCORD_RETRY_DELAY", ge=10)
     render_external_url: str | None = Field(default=None, alias="RENDER_EXTERNAL_URL")
     admin_ids: list[int] = Field(default=[1365594992193830912], alias="ADMIN_IDS")
     excluded_ids: list[int] = Field(default=[], alias="EXCLUDED_IDS")

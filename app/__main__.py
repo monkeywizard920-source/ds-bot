@@ -93,11 +93,16 @@ async def main() -> None:
     asyncio.create_task(keep_alive_ping(settings.render_external_url))
 
     logger.info("Starting Discord bot...")
-    try:
-        async with bot:
-            await bot.start(settings.discord_token)
-    except Exception as e:
-        logger.error("Critical error starting Discord bot: %s", e)
+    while True:
+        try:
+            async with bot:
+                await bot.start(settings.discord_token)
+        except discord.errors.LoginFailure:
+            logger.error("Critical: Invalid Discord token provided. Check your .env file.")
+            break
+        except Exception as e:
+            logger.error("Discord connection error: %s. Retrying in %ds...", e, settings.discord_retry_delay)
+            await asyncio.sleep(settings.discord_retry_delay)
 
 if __name__ == "__main__":
     asyncio.run(main())
