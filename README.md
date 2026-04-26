@@ -11,6 +11,7 @@ Discord bot on `discord.py` that reads messages, stores per-channel context in S
   - someone replies to the bot;
   - someone mentions the bot;
   - `ANSWER_ON_EVERY_MESSAGE=true` is enabled.
+- Sends system logs to Discord channel `1497682736817635590`.
 - Supports `!reset_context` to clear memory for the current channel.
 
 ## Конфигурация (.env)
