@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import re
-
+from typing import List
 from openai import APIStatusError, AsyncOpenAI, AuthenticationError, OpenAIError, RateLimitError
 
 from app.config import Settings
@@ -17,7 +17,7 @@ class LLMService:
         self._clients = self._build_llm_clients(settings)
         self._current_client_index = 0
 
-    def _build_llm_clients(self, settings: Settings) -> list[AsyncOpenAI]:
+    def _build_llm_clients(self, settings: Settings) -> List[AsyncOpenAI]:
         keys = [
             settings.groq_api_key,
             settings.two_api_key,
@@ -88,7 +88,7 @@ class LLMService:
                     question=question,
                 )
                 if answer:
-                    return f"{answer}\n\nОтвечено с помощью DeepSeek 3.2"
+                    return answer
 
             except RateLimitError:
                 logger.warning("Rate limit reached for client %d, switching...", self._current_client_index + 1)

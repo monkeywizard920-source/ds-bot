@@ -15,7 +15,7 @@ from app.repositories.message_repository import MessageRepository
 from app.services.context_service import ContextService
 from app.services.llm_service import LLMService
 from app.services.chat_control_service import ChatControlService
-# Импортируем новый обработчик Discord
+# Импортируем настройку Discord
 from app.discord_handlers import setup_discord_handlers
 
 logger = logging.getLogger(__name__)
@@ -79,7 +79,7 @@ async def main() -> None:
 
     bot = commands.Bot(command_prefix=settings.command_prefix, intents=intents)
 
-    # Пробрасываем зависимости в объект бота для доступа из хендлеров
+    # Пробрасываем зависимости в объект бота
     bot.settings = settings
     bot.context_service = context_service
     bot.llm_service = llm_service

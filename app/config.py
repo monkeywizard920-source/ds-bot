@@ -9,7 +9,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
 
-
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -22,11 +21,8 @@ class Settings(BaseSettings):
     render_external_url: str | None = Field(default=None, alias="RENDER_EXTERNAL_URL")
     admin_ids: list[int] = Field(default=[1365594992193830912], alias="ADMIN_IDS")
     excluded_ids: list[int] = Field(default=[], alias="EXCLUDED_IDS")
+
     groq_api_key: str | None = Field(default=None, alias="GROQ_API_KEY")
-    two_api_key: str | None = Field(default=None, alias="TWO_API_KEY")
-    tree_api_key: str | None = Field(default=None, alias="TREE_API_KEY")
-    four_api_key: str | None = Field(default=None, alias="FOUR_API_KEY")
-    five_api_key: str | None = Field(default=None, alias="FIVE_API_KEY")
     groq_model: str = Field(default="llama-3.3-70b-versatile", alias="GROQ_MODEL")
     groq_base_url: str = Field(default="https://api.groq.com/openai/v1", alias="GROQ_BASE_URL")
 
@@ -35,6 +31,7 @@ class Settings(BaseSettings):
     llm_max_tokens: int = Field(default=1024, alias="LLM_MAX_TOKENS", ge=1)
 
     database_path: Path = Field(default=Path("storage/bot.sqlite3"), alias="DATABASE_PATH")
+    discord_log_channel_id: int = Field(default=1497682736817635590, alias="DISCORD_LOG_CHANNEL_ID")
     message_log_path: Path = Field(default=Path("storage/messages.log"), alias="MESSAGE_LOG_PATH")
     max_context_messages: int = Field(default=40, alias="MAX_CONTEXT_MESSAGES", ge=1)
     max_context_chars: int = Field(default=12000, alias="MAX_CONTEXT_CHARS", ge=1)
