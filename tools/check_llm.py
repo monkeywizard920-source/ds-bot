@@ -13,10 +13,11 @@ async def main() -> None:
     service = LLMService(settings)
     raw_key = (settings.groq_api_key or "").strip().strip("\"'")
     cleaned_key = _clean_api_key(raw_key)
-    placeholder_values = {"$NVIDIA_API_KEY", "NVIDIA_API_KEY", "nvapi-your-key", "sk-your-key"}
+    placeholder_values = {"$GROQ_API_KEY", "GROQ_API_KEY", "gsk-your-key"}
 
     print(f"configured={service.is_configured}")
     print(f"model={settings.groq_model}")
+    print(f"base_url={settings.groq_base_url}")
     print(f"key_length={len(raw_key)}")
 
     env_reference = _env_reference_name(raw_key)
@@ -27,7 +28,7 @@ async def main() -> None:
 
     if raw_key in placeholder_values and not cleaned_key:
         print("key_status=placeholder")
-        print("В .env все еще стоит пример ключа. Замените его на настоящий NVIDIA API key.")
+        print("В .env все еще стоит пример ключа. Замените его на настоящий Groq API key.")
         return
 
     if not cleaned_key:

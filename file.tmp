@@ -13,15 +13,18 @@ Discord bot on `discord.py` that reads messages, stores per-channel context in S
   - `ANSWER_ON_EVERY_MESSAGE=true` is enabled.
 - Supports `!reset_context` to clear memory for the current channel.
 
-## Конфигурация (.env)
+## Setup
 
-```env
-DISCORD_TOKEN=your_discord_bot_token
-GROQ_API_KEY=gsk_your_main_key
-TWO_API_KEY=gsk_optional_backup_key
-ADMIN_IDS=[123456789]
-GROQ_MODEL=llama-3.3-70b-versatile
-GROQ_BASE_URL=https://api.groq.com/openai/v1
+```bash
+pip install discord.py aiohttp pydantic-settings openai aiosqlite
+```
+
+Edit `.env` and set `BOT_TOKEN` and `OPENAI_API_KEY`.
+
+Run:
+
+```bash
+python -m app
 ```
 
 ## Project Structure
@@ -29,9 +32,9 @@ GROQ_BASE_URL=https://api.groq.com/openai/v1
 ```text
 app/
   __main__.py              # Entrypoint
-  bot.py                   # Bot and dispatcher factory
   config.py                # Environment settings
   logging_config.py        # Logging setup
+  discord_handlers.py      # Discord events and commands
   handlers/
     chat.py                # Message and command handlers
   repositories/

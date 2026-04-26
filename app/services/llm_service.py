@@ -29,8 +29,8 @@ class LLMService:
         for i, key in enumerate(keys):
             cleaned = _clean_api_key(key)
             if cleaned:
-                _log_key_info(f"API Key {i+1}", cleaned)
-                clients.append(AsyncOpenAI(api_key=cleaned, base_url=settings.openai_base_url))
+                _log_key_info(f"API Key {i+1}", cleaned, settings.groq_base_url)
+                clients.append(AsyncOpenAI(api_key=cleaned, base_url=settings.groq_base_url))
         return clients
 
     @property
@@ -145,10 +145,10 @@ class LLMService:
 
         return "".join(chunks).strip()
 
-def _log_key_info(name: str, key: str) -> None:
+def _log_key_info(name: str, key: str, base_url: str) -> None:
     # Показывает в логах первые 4 и последние 4 символа ключа для проверки
     masked = f"{key[:4]}...{key[-4:]}" if len(key) > 8 else "****"
-    logger.info("LLM service initialized using %s: %s", name, masked)
+    logger.info("LLM service initialized using %s: %s | URL: %s", name, masked, base_url)
 
 
 def _clean_api_key(api_key: str | None) -> str | None:

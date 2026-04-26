@@ -4,18 +4,19 @@ import asyncio
 import logging
 import os
 import aiohttp
+import discord
+from discord.ext import commands
 
-from aiogram import Bot
-from aiogram.exceptions import TelegramNetworkError, TelegramConflictError
 from aiohttp import web
 
-from app.bot import create_bot, create_dispatcher
 from app.config import Settings
 from app.logging_config import setup_logging
 from app.repositories.message_repository import MessageRepository
 from app.services.context_service import ContextService
 from app.services.llm_service import LLMService
-from app.services.proxy_service import ProxyService
+from app.services.chat_control_service import ChatControlService
+# Импортируем новый обработчик Discord
+from app.discord_handlers import setup_discord_handlers
 
 logger = logging.getLogger(__name__)
 
@@ -52,11 +53,6 @@ async def main() -> None:
     setup_logging()
     settings = Settings()
 
-    # Инициализируем прокси-сервис
-    proxy_service = ProxyService(settings.proxy_file)
-    await proxy_service.load_proxies()
-    await proxy_service.find_working_proxy()
-
     repository = MessageRepository(settings.database_path)
     await repository.init()
 
@@ -66,45 +62,42 @@ async def main() -> None:
         max_context_chars=settings.max_context_chars,
     )
     llm_service = LLMService(settings=settings)
+    chat_control = ChatControlService(repository)
 
-    dispatcher = create_dispatcher(
-        settings=settings,
-        context_service=context_service,
-        llm_service=llm_service,
-    )
+    # Настройка Discord интентов
+    intents = discord.Intents.default()
+    intents.message_content = True
+    intents.members = True
+
+    # Отладочный вывод для проверки конфигурации
+    token = settings.discord_token
+    masked_token = f"{token[:10]}...{token[-10:]}" if len(token) > 20 else "INVALID"
+    logger.info("Configuration Check:")
+    logger.info(f" - DISCORD_TOKEN: {masked_token}")
+    logger.info(f" - ADMIN_IDS: {settings.admin_ids}")
+    logger.info(f" - COMMAND_PREFIX: {settings.command_prefix}")
+
+    bot = commands.Bot(command_prefix=settings.command_prefix, intents=intents)
+
+    # Пробрасываем зависимости в объект бота для доступа из хендлеров
+    bot.settings = settings
+    bot.context_service = context_service
+    bot.llm_service = llm_service
+    bot.chat_control = chat_control
+
+    # Регистрируем события и команды Discord
+    setup_discord_handlers(bot)
 
     # Запускаем фоновый веб-сервер для Render
     asyncio.create_task(start_health_check_server())
     asyncio.create_task(keep_alive_ping(settings.render_external_url))
 
-    while True:
-        logger.info("Starting Telegram polling (direct connection)")
-        bot = create_bot(settings)
-        try:
-            # Очищаем старые сообщения при старте, чтобы не было конфликтов и спама
-            await bot.delete_webhook(drop_pending_updates=True)
-            await dispatcher.start_polling(bot, skip_updates=True)
-        except TelegramConflictError:
-            logger.error(
-                "Обнаружен конфликт: запущен другой экземпляр бота. "
-                "Если вы на Render, это нормально при деплое. Ждем 15 секунд..."
-            )
-            try:
-                await bot.session.close()
-            finally:
-                await asyncio.sleep(15)
-        except TelegramNetworkError as error:
-            logger.warning(
-                "Telegram API is unavailable: %s. Retrying in %s seconds.",
-                error,
-                settings.polling_retry_delay,
-            )
-            await bot.session.close()
-            # Пробуем сменить прокси при ошибке сети
-            await proxy_service.rotate_proxy()
-            await asyncio.sleep(settings.polling_retry_delay)
-        else:
-            break
+    logger.info("Starting Discord bot...")
+    try:
+        async with bot:
+            await bot.start(settings.discord_token)
+    except Exception as e:
+        logger.error("Critical error starting Discord bot: %s", e)
 
 if __name__ == "__main__":
     asyncio.run(main())
