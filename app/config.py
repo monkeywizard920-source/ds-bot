@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from pydantic import Field, field_validator, BeforeValidator
+from pydantic import Field, field_validator, AliasChoices
 from typing import Annotated
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -16,7 +16,10 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    discord_token: str = Field(alias="DISCORD_TOKEN")
+    # Используем AliasChoices для поддержки разных вариантов именования в окружении
+    discord_token: str = Field(
+        validation_alias=AliasChoices("DISCORD_TOKEN", "discord_token")
+    )
     command_prefix: str = Field(default="!", alias="COMMAND_PREFIX")
     render_external_url: str | None = Field(default=None, alias="RENDER_EXTERNAL_URL")
     admin_ids: list[int] = Field(default=[1365594992193830912], alias="ADMIN_IDS")
