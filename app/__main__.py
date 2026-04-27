@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-import aiohttp
 import discord
 from discord.ext import commands
 
@@ -32,22 +31,6 @@ async def start_health_check_server():
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
     logger.info("Health check server started on port %s", port)
-
-async def keep_alive_ping(url: str | None):
-    """Фоновая задача для самопрозвона, чтобы Render не усыплял бота."""
-    if not url:
-        logger.warning("RENDER_EXTERNAL_URL не задан. Self-ping отключен.")
-        return
-
-    logger.info("Self-ping запущен для URL: %s", url)
-    async with aiohttp.ClientSession() as session:
-        while True:
-            await asyncio.sleep(60)  # Пинг каждую минуту
-            try:
-                async with session.get(url) as response:
-                    logger.debug("Self-ping status: %s", response.status)
-            except Exception as e:
-                logger.error("Ошибка self-ping: %s", e)
 
 async def main() -> None:
     setup_logging()
