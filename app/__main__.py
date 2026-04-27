@@ -77,31 +77,34 @@ async def main() -> None:
     logger.info(f" - ADMIN_IDS: {settings.admin_ids}")
     logger.info(f" - COMMAND_PREFIX: {settings.command_prefix}")
 
-    bot = commands.Bot(command_prefix=settings.command_prefix, intents=intents)
-
-    # Пробрасываем зависимости в объект бота
-    bot.settings = settings
-    bot.context_service = context_service
-    bot.llm_service = llm_service
-    bot.chat_control = chat_control
-
-    # Регистрируем события и команды Discord
-    setup_discord_handlers(bot)
-
     # Запускаем фоновый веб-сервер для Render
     asyncio.create_task(start_health_check_server())
     asyncio.create_task(keep_alive_ping(settings.render_external_url))
 
     logger.info("Starting Discord bot...")
-    # Настройка удаленного логирования до запуска бота
-    if settings.discord_log_channel_id:
-        from app.discord_handlers import DiscordLogHandler
-        discord_handler = DiscordLogHandler(bot, settings.discord_log_channel_id)
-        discord_handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(name)s: %(message)s'))
-        logging.getLogger().addHandler(discord_handler)
-
     retry_delay = settings.discord_retry_delay
     while True:
+        # Создаем новый экземпляр бота в каждой итерации, чтобы избежать ошибки "Session is closed"
+        bot = commands.Bot(command_prefix=settings.command_prefix, intents=intents)
+        bot.settings = settings
+        bot.context_service = context_service
+        bot.llm_service = llm_service
+        bot.chat_control = chat_control
+        setup_discord_handlers(bot)
+
+        # Настройка удаленного логирования для текущего экземпляра бота
+        if settings.discord_log_channel_id:
+            from app.discord_handlers import DiscordLogHandler
+            root_logger = logging.getLogger()
+            # Удаляем старый обработчик, если он остался от предыдущей итерации
+            for h in root_logger.handlers[:]:
+                if isinstance(h, DiscordLogHandler):
+                    root_logger.removeHandler(h)
+            
+            discord_handler = DiscordLogHandler(bot, settings.discord_log_channel_id)
+            discord_handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(name)s: %(message)s'))
+            root_logger.addHandler(discord_handler)
+
         try:
             async with bot:
                 await bot.start(settings.discord_token)
