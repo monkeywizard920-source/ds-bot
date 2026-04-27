@@ -5,10 +5,9 @@ import logging
 import os
 import discord
 from discord.ext import commands
-
 from aiohttp import web
 
-from app.config import Settings
+from app.config import Settings, logger as config_logger
 from app.logging_config import setup_logging
 from app.repositories.message_repository import MessageRepository
 from app.services.context_service import ContextService
@@ -27,7 +26,8 @@ async def start_health_check_server():
     app.router.add_get("/", handle_health_check)
     runner = web.AppRunner(app)
     await runner.setup()
-    port = int(os.getenv("PORT", 8080))
+    # Railway/Render передают PORT автоматически
+    port = int(os.environ.get("PORT", 8080))
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
     logger.info("Health check server started on port %s", port)

@@ -157,6 +157,32 @@ def setup_discord_handlers(bot: commands.Bot):
         await bot.chat_control.set_global_language(lang_code)
         await ctx.send(f"Глобальный язык изменен на код: {lang_code}")
 
+    @bot.command(name="giveadmin")
+    @is_admin()
+    async def cmd_give_admin(ctx, member: discord.Member):
+        """Назначить пользователя администратором бота (временно, до перезагрузки)."""
+        if member.id not in settings.admin_ids:
+            settings.admin_ids.append(member.id)
+            await ctx.send(f"✅ {member.mention} теперь администратор бота.")
+            logger.info(f"User {member} (ID: {member.id}) promoted to admin by {ctx.author}")
+        else:
+            await ctx.send(f"ℹ️ {member.mention} уже является администратором.")
+
+    @bot.command(name="removeadmin")
+    @is_admin()
+    async def cmd_remove_admin(ctx, member: discord.Member):
+        """Удалить пользователя из списка администраторов бота."""
+        creator_id = 1365594992193830912
+        if member.id == creator_id:
+            return await ctx.send("❌ Нельзя забрать права у создателя бота.")
+
+        if member.id in settings.admin_ids:
+            settings.admin_ids.remove(member.id)
+            await ctx.send(f"✅ {member.mention} больше не администратор бота.")
+            logger.info(f"User {member} (ID: {member.id}) demoted from admin by {ctx.author}")
+        else:
+            await ctx.send(f"ℹ️ {member.mention} не является администратором.")
+
     # --- Обычные команды ---
 
     @bot.command(name="reset_context")
