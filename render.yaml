@@ -5,7 +5,7 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: python -m app
     envVars:
-      - key: BOT_TOKEN
+      - key: DISCORD_TOKEN
         sync: false
       - key: GROQ_API_KEY
         sync: false

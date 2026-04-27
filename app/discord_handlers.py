@@ -38,12 +38,6 @@ def setup_discord_handlers(bot: commands.Bot):
 
     @bot.event
     async def on_ready():
-        # Настройка удаленного логирования после запуска бота
-        if settings.discord_log_channel_id:
-            discord_handler = DiscordLogHandler(bot, settings.discord_log_channel_id)
-            discord_handler.setFormatter(logging.Formatter('%(name)s: %(message)s'))
-            logging.getLogger().addHandler(discord_handler)
-            
         logger.info(f"Logged in as {bot.user} (ID: {bot.user.id})")
         logger.info(f"Loaded Admin IDs: {settings.admin_ids}")
         logger.info(f"Active Command Prefix: {bot.command_prefix}")

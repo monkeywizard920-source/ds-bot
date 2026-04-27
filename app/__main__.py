@@ -93,15 +93,24 @@ async def main() -> None:
     asyncio.create_task(keep_alive_ping(settings.render_external_url))
 
     logger.info("Starting Discord bot...")
+    # Настройка удаленного логирования до запуска бота
+    if settings.discord_log_channel_id:
+        from app.discord_handlers import DiscordLogHandler
+        discord_handler = DiscordLogHandler(bot, settings.discord_log_channel_id)
+        discord_handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(name)s: %(message)s'))
+        logging.getLogger().addHandler(discord_handler)
+
     retry_delay = settings.discord_retry_delay
     while True:
         try:
             async with bot:
                 await bot.start(settings.discord_token)
             # Если соединение закрылось штатно, сбрасываем задержку
+            logger.info("Discord bot disconnected gracefully. Resetting retry delay.")
             retry_delay = settings.discord_retry_delay
         except discord.errors.LoginFailure:
             logger.error("Critical: Invalid Discord token provided. Check your .env file.")
+            # Нет смысла повторять с неверным токеном
             break
         except discord.errors.HTTPException as e:
             if e.status == 429:
@@ -109,8 +118,13 @@ async def main() -> None:
                              "Ждем %ds перед повтором...", retry_delay)
             else:
                 logger.error("Discord HTTP error: %s. Retrying in %ds...", e, retry_delay)
+            # Для HTTP ошибок также используем экспоненциальную задержку
             await asyncio.sleep(retry_delay)
             retry_delay = min(retry_delay * 2, 900)  # Увеличиваем задержку до 15 минут
+        except discord.ConnectionClosed as e:
+            logger.error("Discord connection closed unexpectedly: Code %s - %s. Retrying in %ds...", e.code, e, retry_delay)
+            await asyncio.sleep(retry_delay)
+            retry_delay = min(retry_delay * 2, 900)
         except Exception as e:
             logger.error("Discord connection error: %s. Retrying in %ds...", e, retry_delay)
             await asyncio.sleep(retry_delay)
