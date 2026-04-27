@@ -84,7 +84,6 @@ async def main() -> None:
     logger.info("Starting Discord bot...")
     retry_delay = settings.discord_retry_delay
     while True:
-        # Создаем новый экземпляр бота в каждой итерации, чтобы избежать ошибки "Session is closed"
         bot = commands.Bot(command_prefix=settings.command_prefix, intents=intents)
         bot.settings = settings
         bot.context_service = context_service
@@ -92,18 +91,24 @@ async def main() -> None:
         bot.chat_control = chat_control
         setup_discord_handlers(bot)
 
-        # Настройка удаленного логирования для текущего экземпляра бота
         if settings.discord_log_channel_id:
             from app.discord_handlers import DiscordLogHandler
-            root_logger = logging.getLogger()
-            # Удаляем старый обработчик, если он остался от предыдущей итерации
+            # Настраиваем логирование ТОЛЬКО для специального логгера запросов
+            request_logger = logging.getLogger("discord_request_log")
+            request_logger.setLevel(logging.INFO)
+            request_logger.propagate = False # Чтобы не дублировать в консоль через root
+            
+            # Очистка старых хендлеров
+            root_logger = logging.getLogger() # Для подстраховки проверяем и root
             for h in root_logger.handlers[:]:
                 if isinstance(h, DiscordLogHandler):
                     root_logger.removeHandler(h)
+            for h in request_logger.handlers[:]:
+                request_logger.removeHandler(h)
             
             discord_handler = DiscordLogHandler(bot, settings.discord_log_channel_id)
             discord_handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(name)s: %(message)s'))
-            root_logger.addHandler(discord_handler)
+            request_logger.addHandler(discord_handler)
 
         try:
             async with bot:

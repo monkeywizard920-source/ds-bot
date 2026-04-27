@@ -113,11 +113,9 @@ class LLMService:
         context: str,
         question: str,
     ) -> str:
-        stream_kwargs = {}
-
-        stream = await client.chat.completions.create(
+        response = await client.chat.completions.create(
             model=model,
-            stream=True,
+            stream=False, # Отключаем стриминг для ускорения получения полного ответа
             messages=[
                 {"role": "system", "content": system_prompt},
                 {
@@ -130,20 +128,8 @@ class LLMService:
                 },
             ],
             **_generation_kwargs_for_model(model, self._settings),
-            **stream_kwargs,
         )
-
-        chunks: list[str] = []
-        async for chunk in stream:
-            if not chunk.choices:
-                continue
-
-            delta = chunk.choices[0].delta
-            content = delta.content
-            if content is not None:
-                chunks.append(content)
-
-        return "".join(chunks).strip()
+        return response.choices[0].message.content.strip()
 
 def _log_key_info(name: str, key: str, base_url: str) -> None:
     # Показывает в логах первые 4 и последние 4 символа ключа для проверки

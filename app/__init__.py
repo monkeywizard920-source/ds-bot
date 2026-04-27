@@ -1,1 +1,1 @@
-"""Context-aware Telegram bot package."""
+"""Context-aware Discord bot package."""

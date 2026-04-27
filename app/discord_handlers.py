@@ -6,6 +6,8 @@ from discord.ext import commands
 from app.domain import StoredMessage
 
 logger = logging.getLogger(__name__)
+# Специальный логгер только для запросов пользователей в Discord канал
+request_logger = logging.getLogger("discord_request_log")
 SANYA_CALL_RE = re.compile(r"^\s*саня\b[\s,.:;!?-]*(.*)$", re.IGNORECASE)
 
 class DiscordLogHandler(logging.Handler):
@@ -20,12 +22,14 @@ class DiscordLogHandler(logging.Handler):
         if not self.bot.is_ready():
             return
         log_entry = self.format(record)
+        # Отрезаем имя логгера из сообщения для красоты
+        msg = log_entry.split(":", 1)[-1].strip() if ":" in log_entry else log_entry
         self.bot.loop.create_task(self.send_log(log_entry))
 
     async def send_log(self, message: str):
         channel = self.bot.get_channel(self.channel_id)
         if channel:
-            await channel.send(f"```\n{message[:1990]}\n```")
+            await channel.send(f"📝 **Log:** {message[:1950]}")
 
 def setup_discord_handlers(bot: commands.Bot):
     settings = bot.settings
@@ -48,8 +52,9 @@ def setup_discord_handlers(bot: commands.Bot):
         if isinstance(error, commands.CheckFailure):
             await ctx.reply("⛔ У вас нет прав администратора для этой команды.")
             logger.warning(f"User {ctx.author} (ID: {ctx.author.id}) tried to use admin command: {ctx.command}")
-        elif isinstance(error, commands.CommandNotFound):
-            pass # Игнорируем, если кто-то просто написал сообщение с префиксом
+        elif isinstance(error, commands.CommandNotFound) and ctx.message.content.startswith(bot.command_prefix):
+            await ctx.reply(f"❌ Команда `{ctx.invoked_with}` не найдена.")
+            logger.info(f"Command not found: {ctx.message.content} by {ctx.author}")
         else:
             logger.error(f"Command Error in {ctx.command}: {error}")
             await ctx.reply(f"❌ Ошибка: {error}")
@@ -82,9 +87,12 @@ def setup_discord_handlers(bot: commands.Bot):
             )
         )
 
-        # Логирование в консоль только обычных пользователей
+        # Логирование запроса
         if not is_admin_user:
-            logger.info(f"[{message.channel}] {message.author}: {message.content}")
+            log_msg = f"[{message.channel}] {message.author}: {message.content}"
+            logger.info(log_msg)
+            # Отправляем только это в Discord канал логов
+            request_logger.info(log_msg)
 
         # Проверка, нужно ли отвечать
         await bot.process_commands(message)
@@ -94,6 +102,15 @@ def setup_discord_handlers(bot: commands.Bot):
             should_answer = await _should_answer_discord(message, bot)
             if should_answer:
                 await _answer_discord(message, bot)
+
+    @bot.command(name="say")
+    @is_admin()
+    async def cmd_say(ctx, channel: discord.TextChannel = None, *, text: str):
+        """Отправить сообщение от имени бота в указанный канал."""
+        target = channel or ctx.channel
+        await target.send(text)
+        if channel: # Если писали в другой канал, подтверждаем выполнение
+            await ctx.message.add_reaction("✅")
 
     # --- Команды Администратора ---
 
