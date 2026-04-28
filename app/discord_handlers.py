@@ -8,7 +8,7 @@ from app.domain import StoredMessage
 logger = logging.getLogger(__name__)
 # Специальный логгер только для запросов пользователей в Discord канал
 request_logger = logging.getLogger("discord_request_log")
-SANYA_CALL_RE = re.compile(r"^\s*саня\b[\s,.:;!?-]*(.*)$", re.IGNORECASE)
+ORION_CALL_RE = re.compile(r"^\s*(orion|orionis|орион|орионис)\b[\s,.:;!?-]*(.*)$", re.IGNORECASE)
 
 class DiscordLogHandler(logging.Handler):
     """Отправляет логи уровня INFO и выше в указанный канал Discord."""
@@ -52,9 +52,8 @@ def setup_discord_handlers(bot: commands.Bot):
         if isinstance(error, commands.CheckFailure):
             await ctx.reply("⛔ У вас нет прав администратора для этой команды.")
             logger.warning(f"User {ctx.author} (ID: {ctx.author.id}) tried to use admin command: {ctx.command}")
-        elif isinstance(error, commands.CommandNotFound) and ctx.message.content.startswith(bot.command_prefix):
-            await ctx.reply(f"❌ Команда `{ctx.invoked_with}` не найдена.")
-            logger.info(f"Command not found: {ctx.message.content} by {ctx.author}")
+        elif isinstance(error, commands.CommandNotFound):
+            pass # Игнорируем, если команда не найдена
         else:
             logger.error(f"Command Error in {ctx.command}: {error}")
             await ctx.reply(f"❌ Ошибка: {error}")
@@ -203,8 +202,8 @@ async def _should_answer_discord(message: discord.Message, bot: commands.Bot) ->
     if bot.settings.answer_on_every_message:
         return True
 
-    # 3. Обращение "Саня"
-    if SANYA_CALL_RE.match(message.content):
+    # 3. Обращение по имени
+    if ORION_CALL_RE.match(message.content):
         return True
 
     # 4. Упоминание бота
@@ -222,11 +221,11 @@ async def _should_answer_discord(message: discord.Message, bot: commands.Bot) ->
     return False
 
 async def _answer_discord(message: discord.Message, bot: commands.Bot, override_question: str = None):
-    # Очистка текста от упоминаний и "Саня"
+    # Очистка текста от упоминаний и имени бота
     question = override_question or message.content
     if not override_question:
         question = re.sub(rf'<@!?{bot.user.id}>', '', question).strip()
-        match = SANYA_CALL_RE.match(question)
+        match = ORION_CALL_RE.match(question)
         if match:
             question = match.group(1).strip() or question
 

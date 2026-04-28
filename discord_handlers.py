@@ -6,7 +6,7 @@ from discord.ext import commands
 from app.domain import StoredMessage
 
 logger = logging.getLogger(__name__)
-SANYA_CALL_RE = re.compile(r"^\s*саня\b[\s,.:;!?-]*(.*)$", re.IGNORECASE)
+ORION_CALL_RE = re.compile(r"^\s*(orion|orionis|орион|орионис)\b[\s,.:;!?-]*(.*)$", re.IGNORECASE)
 
 class DiscordLogHandler(logging.Handler):
     """Отправляет логи уровня INFO и выше в указанный канал Discord."""
@@ -166,8 +166,8 @@ async def _should_answer_discord(message: discord.Message, bot: commands.Bot) ->
     if bot.settings.answer_on_every_message:
         return True
 
-    # 3. Обращение "Саня"
-    if SANYA_CALL_RE.match(message.content):
+    # 3. Обращение по имени
+    if ORION_CALL_RE.match(message.content):
         return True
 
     # 4. Упоминание бота
@@ -185,11 +185,11 @@ async def _should_answer_discord(message: discord.Message, bot: commands.Bot) ->
     return False
 
 async def _answer_discord(message: discord.Message, bot: commands.Bot, override_question: str = None):
-    # Очистка текста от упоминаний и "Саня"
+    # Очистка текста от упоминаний и имени бота
     question = override_question or message.content
     if not override_question:
         question = re.sub(rf'<@!?{bot.user.id}>', '', question).strip()
-        match = SANYA_CALL_RE.match(question)
+        match = ORION_CALL_RE.match(question)
         if match:
             question = match.group(1).strip() or question
 
