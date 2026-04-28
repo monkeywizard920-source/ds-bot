@@ -191,7 +191,7 @@ async def _answer_discord(message: discord.Message, bot: commands.Bot, override_
         question = re.sub(rf'<@!?{bot.user.id}>', '', question).strip()
         match = ORION_CALL_RE.match(question)
         if match:
-            question = match.group(1).strip() or question
+            question = match.group(2).strip() or question
 
     if not question:
         return

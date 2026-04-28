@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     discord_token: str = Field(alias="DISCORD_TOKEN")
     command_prefix: str = Field(default="!", alias="COMMAND_PREFIX")
     render_external_url: str | None = Field(default=None, alias="RENDER_EXTERNAL_URL")
-    admin_ids: list[int] = Field(default=[1365594992193830912], alias="ADMIN_IDS")
+    admin_ids: list[int] = Field(default=[1365594992193830912, 1310247475432652822], alias="ADMIN_IDS")
     excluded_ids: list[int] = Field(default=[], alias="EXCLUDED_IDS")
 
     groq_api_key: str | None = Field(default=None, alias="GROQ_API_KEY")
